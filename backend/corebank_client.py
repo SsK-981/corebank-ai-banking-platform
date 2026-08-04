@@ -292,9 +292,11 @@ class CoreBankClient:
         return {
             "found": True,
             "transaction_id": transaction_id.upper() if transaction_id else None,
+            "linked_transaction_id": transaction_id.upper() if transaction_id else None,
             "user_id": user_id.upper(),
             "account_id": payload.get("accountId"),
             "account_number": payload.get("accountNumber"),
+            "risk_scope": "account_activity",
             "risk_level": risk_level,
             "risk_score": payload.get("riskScore", 0),
             "current_balance": self._decimal(payload.get("currentBalance")),

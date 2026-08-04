@@ -3,7 +3,7 @@
 ## Services
 
 CoreBank is the system of record for customers, KYC, accounts, balances, successful
-transactions, failed attempts, and account-level risk signals. The FastAPI service owns
+transactions, failed attempts, and account activity risk signals. The FastAPI service owns
 support conversations, approved FAQs, support tickets, and audit events. Streamlit is a
 demo client and never talks directly to either database.
 
@@ -24,7 +24,7 @@ demo client and never talks directly to either database.
 | Customer profile and KYC | CoreBank |
 | Accounts and balances | CoreBank |
 | Posted and failed transactions | CoreBank |
-| Risk signals | CoreBank |
+| Account activity risk signals | CoreBank |
 | Conversations and messages | AI agent database |
 | Approved policies | AI agent database |
 | Support tickets and audit events | AI agent database |
@@ -37,4 +37,5 @@ demo client and never talks directly to either database.
 - Invalid/unknown transaction: the agent asks the customer to verify the reference.
 - Concurrent balance update: CoreBank returns a conflict instead of silently losing an
   update.
-- High-risk activity: the system recommends manual review and does not auto-approve.
+- High account activity risk: the system recommends manual review and does not
+  auto-approve.

@@ -236,6 +236,7 @@ def _local_calculate_risk_score(transaction_id: str) -> dict:
             "found": True,
             "transaction_id": transaction.transaction_id,
             "user_id": transaction.user_id,
+            "risk_scope": "transaction",
             "risk_level": result["risk_level"],
             "risk_score": result.get("score"),
             "reasons": result["reasons"],
@@ -280,6 +281,7 @@ def calculate_account_risk(user_id: str) -> dict:
     highest = max(transactions, key=lambda item: risk_order.get(item["risk_level"], -1))
     risk = _local_calculate_risk_score(highest["transaction_id"])
     risk["user_id"] = normalized_id
+    risk["risk_scope"] = "account_activity"
     return risk
 
 

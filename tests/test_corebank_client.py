@@ -154,6 +154,8 @@ def test_corebank_client_returns_risk_insights_for_transaction():
 
     assert result["risk_level"] == "medium"
     assert result["risk_score"] == 40
+    assert result["risk_scope"] == "account_activity"
+    assert result["linked_transaction_id"] == "TXNABC123"
     assert "High debit pressure" in result["reasons"][0]
 
 

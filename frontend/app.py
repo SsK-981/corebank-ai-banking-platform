@@ -108,8 +108,16 @@ def show_chatbot(user_id: str) -> None:
 
     examples_by_user = {
         "U001": ["What is my account balance?", "Show my transactions", "Check my KYC"],
-        "U002": ["What is my account balance?", "Show my transactions", "Is my account risky?"],
-        "U003": ["What is my account balance?", "Show my transactions", "Is my account risky?"],
+        "U002": [
+            "What is my account balance?",
+            "Show my transactions",
+            "Review account activity risk",
+        ],
+        "U003": [
+            "What is my account balance?",
+            "Show my transactions",
+            "Review account activity risk",
+        ],
     }
     st.caption("Try an example")
     examples = examples_by_user[user_id]
@@ -180,7 +188,8 @@ def show_admin_dashboard() -> None:
     title_col, refresh_col = st.columns([5, 1])
     title_col.title("Operations Dashboard")
     title_col.markdown(
-        '<p class="subtle">Authorized support demand, risk review, and audit activity.</p>',
+        '<p class="subtle">Authorized support demand, activity-risk review, '
+        "and audit activity.</p>",
         unsafe_allow_html=True,
     )
     refresh_col.write("")
@@ -200,7 +209,7 @@ def show_admin_dashboard() -> None:
     metric_columns[0].metric("Total transactions", summary["total_transactions"])
     metric_columns[1].metric("Failed transactions", summary["failed_transactions"])
     metric_columns[2].metric("Open tickets", summary["open_tickets"])
-    metric_columns[3].metric("High-risk transactions", summary["high_risk_transactions"])
+    metric_columns[3].metric("High-risk local transactions", summary["high_risk_transactions"])
 
     st.subheader("Support tickets")
     if tickets:
@@ -212,7 +221,7 @@ def show_admin_dashboard() -> None:
     else:
         st.info("No tickets have been created yet.")
 
-    st.subheader("High-risk transactions")
+    st.subheader("High-risk local transactions")
     if risks:
         risk_frame = pd.DataFrame(risks)
         risk_frame["risk_reasons"] = risk_frame["risk_reasons"].apply("; ".join)

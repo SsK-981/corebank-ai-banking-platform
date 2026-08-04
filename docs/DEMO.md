@@ -17,7 +17,8 @@ Open CoreBank at `http://127.0.0.1:8080` and the chatbot at
 3. **Live history:** ask `Show my transactions.` Point out the persisted failed attempt.
 4. **KYC:** ask `What is my KYC status?`. Change it in the CoreBank admin portal and ask
    again to demonstrate live integration.
-5. **Risk:** ask `Is my account risky?` and expand agent activity to show the tool used.
+5. **Account activity risk:** ask `Review account activity risk.` and expand agent
+   activity to show the tool used.
 6. **Authorization:** ask for `U001` while signed in as U002; the request is refused.
 7. **Escalation:** ask `Open a support case for this failed payment.` Show the ticket ID.
 8. **Grounding:** explain that tool-backed responses skip LLM rewriting, while greetings

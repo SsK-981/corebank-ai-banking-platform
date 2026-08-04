@@ -225,8 +225,8 @@ class FintechAgent:
         if any(term in lowered for term in ("thank", "thanks", "okay", "ok", "got it", "gotcha")):
             return (
                 "Anytime — happy to help. If anything else comes up, send me a "
-                "transaction ID or ask about refunds, KYC, risk, wallet issues, or "
-                "support tickets."
+                "transaction ID or ask about refunds, KYC, account activity risk, "
+                "wallet issues, or support tickets."
             )
         if any(term in lowered for term in ("bye", "goodbye")):
             return "Goodbye! If another payment or account issue comes up, I’ll be here to help."
@@ -243,16 +243,16 @@ class FintechAgent:
             return (
                 "I’m doing well — ready to help with your fintech support questions. "
                 "You can ask me to show your transactions, check a refund, review KYC, "
-                "explain risk, or create a support ticket."
+                "explain account activity risk, or create a support ticket."
             )
         if any(term in lowered for term in ("good morning", "good afternoon", "good evening")):
             return (
                 "Hello! Hope your day’s going well. I can help with transactions, refunds, "
-                "KYC status, risk reviews, wallet issues, policies, or support tickets."
+                "KYC status, account activity risk, wallet issues, policies, or support tickets."
             )
         if "are you there" in lowered:
             return (
-                "Yes, I’m here. Tell me the transaction, refund, KYC, wallet, risk, "
+                "Yes, I’m here. Tell me the transaction, refund, KYC, wallet, activity-risk, "
                 "or support issue you want help with."
             )
         if any(
@@ -267,13 +267,13 @@ class FintechAgent:
         ):
             return (
                 "I’m your fintech support assistant. I can check transaction status, "
-                "explain failed-payment refunds, review KYC status, summarize risk "
+                "explain failed-payment refunds, review KYC status, summarize activity-risk "
                 "signals, answer approved policy questions, and create support tickets. "
-                "Try: “Check TXN1001” or “Why is TXN1002 risky?”"
+                "Try: “Check TXN1001” or “Review account activity risk.”"
             )
         return (
             "Hey! I can help with your fintech support stuff — transactions, refunds, "
-            "KYC, risk checks, wallet issues, policy timelines, or support tickets. "
+            "KYC, account activity risk, wallet issues, policy timelines, or support tickets. "
             "You can try something like “Show my transactions” or “Check TXN1002 refund.”"
         )
 
@@ -387,7 +387,7 @@ class FintechAgent:
                     f"{item['transaction_id']} — {item['status']} "
                     f"{FintechAgent._friendly_transaction_type(item['transaction_type'])} "
                     f"of {FintechAgent._format_money(item['amount'])} "
-                    f"(risk: {item['risk_level']})"
+                    f"(activity risk: {item['risk_level']})"
                     for item in transaction_history["transactions"]
                 ]
                 parts.append(
@@ -403,17 +403,27 @@ class FintechAgent:
 
         risk = results.get("risk")
         if risk and risk.get("found"):
-            risk_subject = (
-                risk.get("transaction_id")
-                or f"account {risk.get('account_number') or risk.get('account_id')}"
-            )
-            parts.append(
-                f"Here’s the risk read: {risk_subject} is "
-                f"{risk['risk_level'].upper()} risk because "
-                f"{'; '.join(risk['reasons'])}."
-            )
+            linked_transaction_id = risk.get("linked_transaction_id") or risk.get("transaction_id")
+            account_label = risk.get("account_number") or risk.get("account_id")
+            if risk.get("risk_scope") == "account_activity":
+                if linked_transaction_id:
+                    risk_subject = f"The account associated with {linked_transaction_id}"
+                else:
+                    risk_subject = f"Account {account_label}" if account_label else "This account"
+                parts.append(
+                    f"{risk_subject} currently has "
+                    f"{risk['risk_level'].upper()} account activity risk because "
+                    f"{'; '.join(risk['reasons'])}."
+                )
+            else:
+                risk_subject = linked_transaction_id or f"account {account_label}"
+                parts.append(
+                    f"Here is the transaction risk read: {risk_subject} is "
+                    f"{risk['risk_level'].upper()} risk because "
+                    f"{'; '.join(risk['reasons'])}."
+                )
             if risk.get("risk_score") is not None:
-                parts.append(f"Risk score: {risk['risk_score']}.")
+                parts.append(f"Activity-risk score: {risk['risk_score']}.")
             if risk["manual_review_required"]:
                 parts.append(
                     "Because of that, it needs manual review and cannot be approved automatically."
@@ -448,10 +458,10 @@ class FintechAgent:
             parts.append(
                 "I’m focused on fintech support, so I do not want to guess outside the "
                 "approved records. I can help with transactions, refunds, KYC, wallet "
-                "issues, risk reviews, policies, or support tickets."
+                "issues, account activity risk, policies, or support tickets."
             )
 
         return " ".join(parts) or (
-            "I can help with transactions, refunds, KYC, wallet issues, risk reviews, "
+            "I can help with transactions, refunds, KYC, wallet issues, account activity risk, "
             "policies, and human support escalation."
         )
