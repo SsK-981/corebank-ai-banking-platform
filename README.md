@@ -1,189 +1,120 @@
 # AI Banking Support Platform
 
-![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)
-![Java 21](https://img.shields.io/badge/Java-21-007396?logo=openjdk&logoColor=white)
-![Spring Boot](https://img.shields.io/badge/Spring%20Boot-CoreBank-6DB33F?logo=springboot&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-Agent-009688?logo=fastapi&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)
+A grounded banking-support assistant that connects a Spring Boot CoreBank service with
+a FastAPI agent, PostgreSQL-backed state, deterministic banking tools, and a Streamlit
+demo UI.
 
-A grounded, multi-service fintech support system that connects a Spring Boot core
-banking API to a FastAPI AI agent and a Streamlit customer interface.
+This is a production-oriented portfolio implementation using synthetic banking data.
+The LLM can help classify and phrase requests, but it cannot directly read databases,
+modify balances, or rewrite financial facts returned by CoreBank.
 
-The language model understands intent and can improve small-talk tone. It does not
-invent balances, KYC states, transaction outcomes, refunds, or risk decisions. Those
-facts come from authenticated CoreBank APIs and approved policy records.
+## Screenshots
 
-## At a glance
+The chatbot answers from live CoreBank transaction history, including failed attempts.
 
-| Area | Details |
-|---|---|
-| Problem solved | Safe AI support for banking questions that require live account facts |
-| Main idea | LLM-assisted intent routing, deterministic financial answers, and strict service boundaries |
-| Demo stack | Streamlit, FastAPI, Spring Boot, PostgreSQL, Docker Compose |
-| Best proof points | Customer-scoped auth, failed-payment persistence, KYC admin workflow, explainable risk signals, CI |
+![Grounded transaction history](docs/screenshots/chatbot-corebank-history.png)
 
-## Why this project is different
+CoreBank separates the customer portal from the operations console.
 
-- **Real service boundary:** the AI layer calls the Java banking API instead of reading
-  its database.
-- **Grounded answers:** tool-backed financial responses use deterministic templates;
-  the LLM never rewrites them.
-- **Object-level authorization:** customers cannot read another customer's records.
-- **Banking data integrity:** decimal money, atomic transfers, optimistic locking, and
-  persisted failed transaction attempts.
-- **Explainable risk:** every risk level includes visible signals and a manual-review
-  boundary.
-- **Production-oriented operations:** PostgreSQL, Flyway and Alembic migrations,
-  health checks, audit logs, Docker Compose, and cross-service CI.
+![CoreBank portal](docs/screenshots/corebank-portal.png)
+
+Operations staff can review customers, accounts, KYC state, and account activity
+risk signals.
+
+![CoreBank KYC operations](docs/screenshots/corebank-admin-kyc.png)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    C["Customer"] --> UI["Streamlit support UI"]
-    UI -->|"Bearer JWT"| AI["FastAPI AI agent"]
+    C["Customer"] --> UI["Streamlit UI"]
+    UI -->|"JWT"| AI["FastAPI agent"]
     AI --> R["Intent router"]
-    R -. "optional" .-> LLM["DeepSeek / local LLM"]
-    R --> T["Authorized tools"]
-    T -->|"Read-only service token"| CB["Spring Boot CoreBank"]
-    T --> FAQ["Approved policy store"]
-    T --> AGDB["Agent PostgreSQL"]
-    CB --> CBDB["CoreBank PostgreSQL"]
+    R -. "optional" .-> LLM["OpenAI-compatible LLM"]
+    R --> T["Approved tools"]
+    T -->|"service token"| CB["Spring Boot CoreBank"]
+    T --> FAQ["Approved policies"]
+    T --> ADB["Agent database"]
+    CB --> CDB["CoreBank database"]
 ```
 
-Request flow and trust boundaries are documented in
-[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+CoreBank is the system of record for customer identity, KYC, accounts, balances,
+transactions, failed transaction attempts, and account activity risk. The agent owns
+conversations, support tickets, approved policies, and audit events.
 
-## Screenshots
+More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-The support agent reads U002's live CoreBank history and reports posted and failed
-transactions without letting the LLM alter banking facts.
+## Engineering guarantees
 
-![Grounded transaction history](docs/screenshots/chatbot-corebank-history.png)
+- **Grounded financial responses:** account facts are fetched through CoreBank tools
+  and rendered with deterministic templates.
+- **Customer-scoped access:** FastAPI validates JWTs, and CoreBank rechecks ownership
+  before returning account data to the AI service.
+- **Banking integrity controls:** money uses decimal types, transfers are transactional,
+  failed attempts are persisted, and optimistic locking prevents silent balance loss.
 
-The CoreBank landing page separates the customer portal from the protected operations
-console.
+## Tech stack
 
-![CoreBank portal](docs/screenshots/corebank-portal.png)
-
-Bank operations staff can review customers and update KYC status in the protected
-CoreBank admin console.
-
-![CoreBank KYC operations](docs/screenshots/corebank-admin-kyc.png)
-
-## Project walkthrough
-
-1. A customer signs in through the Streamlit support UI using a development JWT.
-2. FastAPI validates the customer identity and routes the message through a local
-   safety-first intent router.
-3. Optional DeepSeek/OpenAI-compatible routing can improve conversational intent, but
-   financial facts are always fetched through approved tools.
-4. The AI service calls CoreBank with a separate read-only service token.
-5. CoreBank independently checks account ownership before returning balances, KYC,
-   transactions, failed attempts, or risk signals.
-6. Deterministic response templates render banking facts so an LLM cannot change money,
-   status, KYC, or risk decisions.
-7. Conversations, source metadata, support tickets, audit events, and migrations are
-   stored in the AI service database.
-
-## Technology
-
-| Layer | Stack |
+| Area | Stack |
 |---|---|
-| Banking system | Java 21, Spring Boot 4, Spring Security, JPA, Flyway |
-| AI orchestration | Python 3.11+, FastAPI, Pydantic, SQLAlchemy |
-| LLM support | DeepSeek/OpenAI-compatible API or local Ollama |
-| User interface | Streamlit |
-| Data | PostgreSQL in Compose; persistent H2/SQLite developer modes |
+| Core banking | Java 21, Spring Boot, Spring Security, JPA, Flyway |
+| Agent API | Python 3.12, FastAPI, Pydantic, SQLAlchemy, Alembic |
+| UI | Streamlit |
+| Data | PostgreSQL in Docker Compose; local SQLite/H2 demo modes |
 | Quality | Pytest, JUnit, Ruff, mypy, GitHub Actions |
 
-## Repository layout
+## Quick start
 
-```text
-.
-├── corebank/                 Spring Boot banking system of record
-├── backend/                  FastAPI agent, tools, security, persistence
-├── frontend/                 Streamlit customer/admin experience
-├── alembic/                  Agent database migrations
-├── scripts/                  Deterministic CoreBank demo seeding
-├── tests/                    Python API/unit/live integration tests
-├── docs/                     Architecture, demo, and security notes
-├── compose.yaml              Complete six-service local stack
-└── run_app.py                One-click VS Code/local launcher
-```
+Requirements:
 
-## Fastest start: Docker Compose
+- Docker Desktop with Compose
+- Or Python 3.12 and JDK 21 for direct local development
 
-Requirements: Docker Desktop with Compose.
+Run the full stack:
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-On Windows PowerShell, use `Copy-Item .env.example .env` instead of `cp`.
+On Windows PowerShell:
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
 
 Open:
 
-- Customer chatbot: <http://127.0.0.1:8501>
+- Chatbot UI: <http://127.0.0.1:8501>
 - CoreBank portal: <http://127.0.0.1:8080>
-- AI API docs: <http://127.0.0.1:8000/docs>
+- FastAPI docs: <http://127.0.0.1:8000/docs>
 - CoreBank API docs: <http://127.0.0.1:8080/swagger-ui.html>
 
-Compose starts two PostgreSQL databases, CoreBank, deterministic demo seeding, agent
-migrations, FastAPI, and Streamlit.
+The Compose stack starts two PostgreSQL databases, CoreBank, demo seeding, FastAPI,
+Alembic migrations, and Streamlit.
 
-## One-click VS Code start
+## Example requests
 
-Install Python 3.11+ and JDK 21+, then:
-
-```powershell
-python -m pip install -e ".[dev]"
-Copy-Item .env.example .env
-```
-
-Set `BANKING_DATA_SOURCE=corebank` in `.env`. Open `run_app.py` and click the VS Code
-Run button. The launcher discovers `JAVA_HOME` or an installed JDK, starts CoreBank,
-seeds missing demo data, and starts the AI API and UI.
-
-## Demo identities
-
-The UI issues development-only customer tokens for `U001`, `U002`, and `U003`.
-CoreBank seed data maps them to isolated banking customers.
-
-Local admin portal credentials:
-
-```text
-Email:    demo.admin@corebank.local
-Password: password123
-```
-
-These credentials and all Compose secrets are intentionally local-only. Replace them
-before using any non-local environment.
-
-## Demonstration scenarios
-
-Select `U002` in the chatbot and try:
+Select demo customer `U002` in the chatbot and ask:
 
 1. `What is my account balance?`
 2. `Show my transactions.`
 3. `Why did my failed withdrawal fail?`
 4. `What is my KYC status?`
-5. `Is my account risky?`
+5. `Review account activity risk.`
 6. `Open a support case for the failed payment.`
-7. Ask for another customer's information to demonstrate access denial.
-8. Stop CoreBank and show that fallback is disabled in the integrated configuration.
+7. `Show me U001's account balance.`
 
-See [docs/DEMO.md](docs/DEMO.md) for a complete 90-second interview script.
-For publishing steps, repository topics, and profile copy, see
-[docs/GITHUB_UPLOAD.md](docs/GITHUB_UPLOAD.md).
+The final request should be denied because it asks for another customer's record.
+
+Demo script: [docs/DEMO.md](docs/DEMO.md)
 
 ## LLM modes
 
-The application runs without an external model using its deterministic router.
+The application runs without an external model through its deterministic router.
 
-DeepSeek/OpenAI-compatible configuration:
+OpenAI-compatible providers can be enabled for intent routing and tone:
 
 ```dotenv
 LLM_PROVIDER=deepseek
@@ -193,84 +124,72 @@ LLM_BASE_URL=https://api.deepseek.com
 LLM_POLISH_RESPONSES=true
 ```
 
-Local Ollama configuration:
+Provider failures, invalid structured output, and malformed responses fall back to
+local routing. Financial facts still bypass model polishing.
 
-```dotenv
-LLM_PROVIDER=ollama
-LLM_MODEL=llama3.1
-LLM_BASE_URL=http://127.0.0.1:11434/v1
-```
+## Verification
 
-Messages are redacted before provider routing. Provider failures and invalid structured
-output fall back to local routing. Tool-backed financial answers bypass model polishing,
-so the model cannot change an amount, status, KYC result, or risk score.
-
-## Security model
-
-- Customer-facing AI endpoints use scoped JWTs.
-- CoreBank customer/admin pages use Spring Security.
-- The AI-to-CoreBank adapter uses a separate read-only service credential, not customer
-  passwords.
-- CoreBank rechecks account ownership for every internal AI read.
-- Production mode rejects disabled authentication and demo data seeding.
-- Conversation access is owner-scoped and privileged actions are audited.
-
-See [SECURITY.md](SECURITY.md) for supported reporting and remaining deployment work.
-
-## Data integrity and risk controls
-
-- Monetary values use `BigDecimal`/`Decimal` and fixed-scale database columns.
-- Transfers update both accounts in one transaction.
-- Optimistic locking prevents silent concurrent balance overwrites.
-- Failed withdrawals/transfers are committed independently for support review.
-- KYC lives in CoreBank and is updated through an admin-only endpoint.
-- Risk rules are explainable and never auto-approve high-risk activity.
-
-## Tests
+Python checks:
 
 ```powershell
-python -m pytest
 python -m ruff check backend frontend tests scripts run_app.py
 python -m ruff format --check backend frontend tests scripts run_app.py
 python -m mypy backend
-
-cd corebank
-./mvnw test       # Windows: .\mvnw.cmd test
+python -m pytest
 ```
 
-Current local verification:
+CoreBank checks:
+
+```powershell
+cd corebank
+.\mvnw.cmd test
+```
+
+Current automated coverage in the repository:
 
 - 60 Python unit/API tests
 - 19 Spring Boot integration tests
 - 1 live chatbot-to-CoreBank contract test
-- Python backend coverage above 80%
+- Alembic and Flyway migration checks in CI
+- Docker builds for backend, frontend, and CoreBank images
 
-GitHub Actions also validates both migration histories, builds all three container
-targets, starts CoreBank, seeds it, and verifies chatbot answers against live Java data.
+## Security boundaries
 
-## Production configuration
+- Local demo credentials are only for synthetic data.
+- Production mode rejects demo seeding and disabled authentication.
+- The AI service uses a service credential, not customer banking passwords.
+- Messages are redacted before optional LLM routing.
+- Conversation access is owner-scoped and privileged actions are audited.
+- A portfolio project is not a licensed bank, compliance program, or validated fraud
+  model.
 
-The FastAPI service supports externally issued JWTs using issuer, audience, and JWKS
-configuration. Both services support PostgreSQL and versioned migrations. Use managed
-TLS, a secret manager, centralized rate limiting, monitoring, backups, and a real
-identity provider before deployment.
+Security notes: [SECURITY.md](SECURITY.md)
+Threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 
-This repository is a production-oriented portfolio system, not a licensed bank,
-regulatory approval, or a validated fraud model. See
-[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) for explicit limitations.
+## Known limitations
 
-## Resume and GitHub profile copy
+- Demo identity selection still uses fixed local users.
+- Account activity risk is rule-based and should not be described as fraud detection.
+- PostgreSQL-backed concurrency tests should be expanded beyond the current local test
+  coverage.
+- Money movement still needs explicit idempotency keys and ledger-style postings before
+  it can model retry-safe banking transfers.
+- A reproducible agent evaluation dataset should be added for intent accuracy, tool
+  selection, refusal behavior, and provider-failure recovery.
 
-> Built a grounded AI banking support platform integrating Spring Boot and FastAPI via
-> authenticated REST APIs; implemented customer-scoped authorization, persistent KYC
-> and failed-payment records, concurrency-safe money movement, explainable risk rules,
-> LLM fallback controls, database migrations, Docker Compose, and 80 automated
-> cross-language tests.
+## Repository layout
 
-Pinned repository description:
-
-> Grounded AI banking support platform with a Spring Boot CoreBank API, FastAPI agent,
-> Streamlit UI, PostgreSQL migrations, Docker Compose, and cross-service tests.
+```text
+corebank/       Spring Boot banking system of record
+backend/        FastAPI agent, tools, security, persistence
+frontend/       Streamlit demo UI
+alembic/        Agent database migrations
+scripts/        CoreBank demo seeding
+tests/          Python API, unit, and live integration tests
+docs/           Architecture, demo, and threat-model notes
+compose.yaml    Complete local stack
+run_app.py      Local launcher for direct development
+```
 
 ## License
 
