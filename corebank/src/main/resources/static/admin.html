@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoreBank Admin Portal</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="topbar admin-topbar">
+        <div>
+            <p class="eyebrow">Admin Portal</p>
+            <h1>Admin Dashboard</h1>
+        </div>
+        <div class="top-actions">
+            <a class="secondary-link" href="index.html">Portal Home</a>
+            <button type="button" id="logout-button" class="secondary hidden">Log Out</button>
+        </div>
+    </header>
+
+    <main class="layout">
+        <section class="panel wide" id="auth-panel">
+            <h2>Admin Access</h2>
+            <div class="portal-auth">
+                <form id="login-form" class="form-stack">
+                    <h3>Admin Login</h3>
+                    <input type="email" id="login-email" placeholder="Admin email" required>
+                    <input type="password" id="login-password" placeholder="Password" required>
+                    <button type="submit">Login as Admin</button>
+                    <p id="login-result" class="message hidden"></p>
+                </form>
+                <form id="register-form" class="form-stack">
+                    <h3>Invite-Code Admin Signup</h3>
+                    <input type="text" id="register-name" placeholder="Full name" required>
+                    <input type="email" id="register-email" placeholder="Admin email" required>
+                    <input type="password" id="register-password" placeholder="Password, minimum 8 chars" minlength="8" required>
+                    <input type="password" id="register-admin-code" placeholder="Admin invite code" required>
+                    <button type="submit">Create Admin</button>
+                    <p id="register-result" class="message hidden"></p>
+                </form>
+            </div>
+            <p id="current-user" class="session-line">You are not logged in.</p>
+        </section>
+
+        <section class="workspace-banner role-admin signed-in-panel hidden">
+            <div>
+                <p class="eyebrow">Admin Console</p>
+                <h2>Bank Operations</h2>
+            </div>
+            <p id="admin-role-line">Role: ADMIN</p>
+        </section>
+
+        <section class="panel wide signed-in-panel hidden">
+            <div class="section-head">
+                <h2>Admin Summary</h2>
+                <button type="button" id="refresh-admin" class="secondary">Refresh</button>
+            </div>
+            <div class="stats-grid">
+                <div><span>Total</span><strong id="stat-total">0</strong></div>
+                <div><span>Active</span><strong id="stat-active">0</strong></div>
+                <div><span>Closed</span><strong id="stat-closed">0</strong></div>
+                <div><span>Transactions</span><strong id="stat-transactions">0</strong></div>
+                <div><span>Bank Balance</span><strong>Rs <span id="stat-balance">0.00</span></strong></div>
+            </div>
+        </section>
+
+        <section class="panel wide signed-in-panel hidden">
+            <div class="section-head">
+                <h2>Customers</h2>
+                <button type="button" id="refresh-customers" class="secondary">Refresh</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Role</th><th>KYC</th><th>Update KYC</th></tr></thead>
+                    <tbody id="customers-table"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="panel wide signed-in-panel hidden">
+            <div class="section-head">
+                <h2>All Bank Accounts</h2>
+                <button type="button" id="export-accounts" class="secondary">Export Accounts CSV</button>
+            </div>
+            <form id="search-form" class="inline-form">
+                <input type="text" id="account-search" placeholder="Search by ID, number, holder, or email">
+                <button type="submit">Search</button>
+            </form>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>ID</th><th>Account No.</th><th>Holder</th><th>Owner</th><th>Balance</th><th>Status</th></tr></thead>
+                    <tbody id="accounts-table"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="account-hero signed-in-panel hidden">
+            <div>
+                <p class="eyebrow">Selected Account</p>
+                <h2 id="display-holder-name">No account selected</h2>
+                <p id="display-account-meta">Select an account from the admin table.</p>
+            </div>
+            <div class="balance-box">
+                <span>Available Balance</span>
+                <strong>Rs <span id="display-balance">0.00</span></strong>
+            </div>
+        </section>
+
+        <section class="panel signed-in-panel hidden">
+            <h2>Manage Selected Account</h2>
+            <form id="credit-form" class="inline-form">
+                <input type="number" id="credit-amount" placeholder="Credit amount" min="0.01" step="0.01" required>
+                <button type="submit">Credit</button>
+            </form>
+            <form id="rename-form" class="inline-form">
+                <input type="text" id="rename-holder" placeholder="New holder name" required>
+                <button type="submit">Update</button>
+            </form>
+            <button type="button" id="close-account" class="danger">Close Zero-Balance Account</button>
+            <button type="button" id="download-statement" class="secondary full-button">Export Account CSV</button>
+            <p id="account-action-result" class="message hidden"></p>
+        </section>
+
+        <section class="panel wide signed-in-panel hidden">
+            <div class="section-head">
+                <h2>All Transactions</h2>
+                <button type="button" id="export-transactions" class="secondary">Export Transactions CSV</button>
+            </div>
+            <div class="table-wrap">
+                <table>
+                    <thead><tr><th>Reference</th><th>Account</th><th>Owner</th><th>Type</th><th>Status</th><th>Amount</th><th>Date</th><th>Description</th></tr></thead>
+                    <tbody id="transactions-table"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="admin.js"></script>
+</body>
+</html>

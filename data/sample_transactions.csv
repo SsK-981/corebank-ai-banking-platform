@@ -1,0 +1,6 @@
+transaction_id,user_id,amount,transaction_type,status,failed_attempts,risk_level
+TXN1001,U001,500,recharge,success,0,low
+TXN1002,U002,25000,wallet_transfer,failed,3,high
+TXN1003,U003,1200,bill_payment,pending,1,low
+TXN1004,U001,7500,UPI_payment,failed,2,medium
+TXN1005,U003,30000,wallet_transfer,pending,4,high

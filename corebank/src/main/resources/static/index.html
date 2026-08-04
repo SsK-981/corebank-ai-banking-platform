@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CoreBank</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <header class="topbar">
+        <div>
+            <p class="eyebrow">Retail Banking Platform</p>
+            <h1>CoreBank</h1>
+        </div>
+        <div class="health-pill" id="health-status">Checking API</div>
+    </header>
+
+    <main class="landing">
+        <section class="landing-option">
+            <p class="eyebrow">Customer Portal</p>
+            <h2>Personal Banking</h2>
+            <p>Sign up, manage your own accounts, move money, view transactions, export statements, and review your account risk signals.</p>
+            <a class="button-link" href="customer.html">Continue as Customer</a>
+        </section>
+
+        <section class="landing-option admin-option">
+            <p class="eyebrow">Admin Portal</p>
+            <h2>Operations Console</h2>
+            <p>Use protected admin access to review customers, all accounts, all transactions, portfolio summaries, and risk intelligence.</p>
+            <a class="button-link" href="admin.html">Admin Login</a>
+        </section>
+    </main>
+
+    <script>
+        fetch('/accounts/health')
+            .then(response => response.text())
+            .then(message => {
+                const status = document.getElementById('health-status');
+                status.textContent = message;
+                status.classList.add('ok');
+            })
+            .catch(() => {
+                const status = document.getElementById('health-status');
+                status.textContent = 'API unavailable';
+                status.classList.add('bad');
+            });
+    </script>
+</body>
+</html>

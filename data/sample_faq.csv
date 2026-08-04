@@ -1,0 +1,6 @@
+category,question,answer
+refund,When will I receive a refund for a failed transaction?,Refund for a failed transaction usually takes 3-5 working days after payment partner confirmation.
+kyc,How long does KYC verification take?,KYC verification usually takes 24-48 hours after all valid documents are submitted.
+risk,What happens to a high-risk transaction?,High-risk transactions are sent for manual review and are never approved automatically.
+wallet,When will a wallet debit be reversed?,Wallet debit reversal depends on bank or payment partner confirmation. Please retain the transaction ID for tracking.
+recharge,How are failed recharge refunds handled?,Failed recharge refunds are processed after payment gateway confirmation.

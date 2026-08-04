@@ -1,0 +1,4 @@
+user_id,name,mobile,email,kyc_status,wallet_balance,account_status
+U001,Rahul Sharma,9876500001,rahul@example.com,verified,4500,active
+U002,Amit Verma,9876500002,amit@example.com,pending,1200,active
+U003,Neha Patil,9876500003,neha@example.com,verified,8000,active

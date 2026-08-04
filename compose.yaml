@@ -1,0 +1,136 @@
+services:
+  agent-database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: fintech
+      POSTGRES_USER: fintech
+      POSTGRES_PASSWORD: ${AGENT_POSTGRES_PASSWORD:-local-agent-password}
+    volumes:
+      - agent_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fintech -d fintech"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  corebank-database:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: corebank
+      POSTGRES_USER: corebank
+      POSTGRES_PASSWORD: ${COREBANK_POSTGRES_PASSWORD:-local-corebank-password}
+    volumes:
+      - corebank_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U corebank -d corebank"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  corebank:
+    build:
+      context: ./corebank
+    environment:
+      SPRING_PROFILES_ACTIVE: postgres
+      SPRING_DATASOURCE_URL: jdbc:postgresql://corebank-database:5432/corebank
+      SPRING_DATASOURCE_USERNAME: corebank
+      SPRING_DATASOURCE_PASSWORD: ${COREBANK_POSTGRES_PASSWORD:-local-corebank-password}
+      APP_ADMIN_CODE: ${COREBANK_ADMIN_CODE:-admin123}
+      COREBANK_SERVICE_TOKEN: ${COREBANK_SERVICE_TOKEN:-local-corebank-service-token-change-me}
+    ports:
+      - "8080:8080"
+    depends_on:
+      corebank-database:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://localhost:8080/accounts/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  corebank-seed:
+    build:
+      context: .
+      target: backend
+    command: ["python", "scripts/seed_corebank_demo.py"]
+    environment:
+      COREBANK_BASE_URL: http://corebank:8080
+      COREBANK_SEED_ADMIN_CODE: ${COREBANK_ADMIN_CODE:-admin123}
+      COREBANK_SEED_ADMIN_EMAIL: demo.admin@corebank.local
+      COREBANK_SEED_ADMIN_PASSWORD: ${COREBANK_DEMO_PASSWORD:-password123}
+      COREBANK_SEED_USER_U001_PASSWORD: ${COREBANK_DEMO_PASSWORD:-password123}
+      COREBANK_SEED_USER_U002_PASSWORD: ${COREBANK_DEMO_PASSWORD:-password123}
+      COREBANK_SEED_USER_U003_PASSWORD: ${COREBANK_DEMO_PASSWORD:-password123}
+    depends_on:
+      corebank:
+        condition: service_healthy
+    restart: "no"
+
+  migrate:
+    build:
+      context: .
+      target: backend
+    command: ["alembic", "upgrade", "head"]
+    environment: &agent-environment
+      APP_ENV: development
+      DATABASE_URL: postgresql+psycopg://fintech:${AGENT_POSTGRES_PASSWORD:-local-agent-password}@agent-database:5432/fintech
+      AUTH_MODE: development
+      JWT_SECRET: ${JWT_SECRET:-local-compose-secret-change-before-production}
+      SEED_DEMO_DATA: "false"
+      BANKING_DATA_SOURCE: corebank
+      COREBANK_BASE_URL: http://corebank:8080
+      COREBANK_SERVICE_TOKEN: ${COREBANK_SERVICE_TOKEN:-local-corebank-service-token-change-me}
+      COREBANK_FALLBACK_TO_LOCAL: "false"
+      COREBANK_USER_U001_EMAIL: rahul@example.com
+      COREBANK_USER_U002_EMAIL: amit@example.com
+      COREBANK_USER_U003_EMAIL: neha@example.com
+      LLM_PROVIDER: ${LLM_PROVIDER:-local}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-v4-flash}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+    depends_on:
+      agent-database:
+        condition: service_healthy
+    restart: "no"
+
+  backend:
+    build:
+      context: .
+      target: backend
+    environment:
+      <<: *agent-environment
+      SEED_DEMO_DATA: "true"
+      CORS_ORIGINS: http://localhost:8501,http://127.0.0.1:8501
+    ports:
+      - "8000:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      corebank-seed:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      target: frontend
+    environment:
+      FINTECH_API_URL: http://backend:8000
+      FINTECH_DEV_AUTH: "true"
+      BANKING_DATA_SOURCE: corebank
+    ports:
+      - "8501:8501"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  agent_postgres_data:
+  corebank_postgres_data:
