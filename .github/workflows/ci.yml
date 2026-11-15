@@ -94,3 +94,40 @@ jobs:
           COREBANK_SERVICE_TOKEN: local-corebank-service-token-change-me
           COREBANK_FALLBACK_TO_LOCAL: "false"
         run: python -m pytest tests/integration/test_live_corebank.py -q
+      - name: Verify support from the signed-in customer portal
+        env:
+          APP_ENV: development
+          AUTH_MODE: development
+          JWT_SECRET: ci-secret-that-is-definitely-longer-than-32-characters
+          DATABASE_URL: sqlite:///portal_ci.db
+          SEED_DEMO_DATA: "true"
+          BANKING_DATA_SOURCE: corebank
+          COREBANK_SERVICE_TOKEN: local-corebank-service-token-change-me
+          COREBANK_FALLBACK_TO_LOCAL: "false"
+          LLM_PROVIDER: local
+        run: |
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > support-ci.log 2>&1 &
+          support_pid=$!
+          trap 'kill "$support_pid" 2>/dev/null || true' EXIT
+          if ! curl --fail --silent --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health/ready; then
+            cat support-ci.log
+            exit 1
+          fi
+
+          python - <<'PY'
+          import requests
+
+          url = "http://127.0.0.1:8080/customer/support/chat"
+          prompt = {"message": "What is my KYC status?"}
+          unauthorized = requests.post(url, json=prompt, timeout=10)
+          assert unauthorized.status_code in {401, 403}, unauthorized.status_code
+
+          response = requests.post(
+              url, auth=("amit@example.com", "password123"), json=prompt, timeout=30
+          )
+          response.raise_for_status()
+          payload = response.json()
+          assert "check_kyc_status" in payload["tools_used"], payload
+          assert "pending" in payload["response"].lower(), payload
+          assert payload["conversation_id"], payload
+          PY

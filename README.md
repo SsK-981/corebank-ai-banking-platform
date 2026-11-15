@@ -1,22 +1,54 @@
 # AI Banking Support Platform
 
 A grounded banking-support assistant that connects a Spring Boot CoreBank service with
-a FastAPI agent, PostgreSQL-backed state, deterministic banking tools, and a Streamlit
-demo UI.
+a FastAPI agent, PostgreSQL-backed state, and deterministic banking tools. Customers
+can manage accounts, transfer money, review activity, and open Help from one portal.
 
 This is a production-oriented portfolio implementation using synthetic banking data.
 The LLM can help classify and phrase requests, but it cannot directly read databases,
 modify balances, or rewrite financial facts returned by CoreBank.
 
+## Quick start
+
+Install Docker Desktop (or Docker Engine with Compose), then run:
+
+```bash
+git clone https://github.com/SsK-981/fintech-ai-agent-chatbot.git
+cd fintech-ai-agent-chatbot
+docker compose up --build
+```
+
+1. Open [CoreBank](http://localhost:8080) and select **Try demo account**.
+   The default local demo uses `amit@example.com` / `password123`.
+2. Open **Activity** to see the seeded withdrawal and transfer history.
+3. Open **Help** and ask “Show my transactions” or “What is my KYC status?”
+   Help uses the same signed-in demo customer. New registrations can use the banking
+   portal. Integrated Help currently supports the three seeded customers.
+4. For a transfer demo, use Rahul’s account number from
+   `docker compose logs corebank-seed`.
+
+Compose starts the databases, applies migrations, seeds synthetic banking records,
+and starts the support backend. The default demo works without an API key or a
+`.env` file. If the portal opens before seeding finishes, wait for
+`corebank-seed` to exit successfully and try again. Use `docker compose down`
+to stop the stack and keep local demo data.
+
+Other local surfaces:
+
+- [Bank operations](http://localhost:8080/admin.html) with demo credentials
+  `demo.admin@corebank.local` / `password123`
+- [Standalone Streamlit playground](http://localhost:8501)
+- [FastAPI docs](http://localhost:8000/docs) and
+  [CoreBank API docs](http://localhost:8080/swagger-ui.html)
+
+The seeded data, accounts, and defaults are intended for local development.
+See [the walkthrough](docs/DEMO.md) for a complete demo.
+
 ## Screenshots
 
-The chatbot answers from live CoreBank transaction history, including failed attempts.
+The customer workspace brings accounts, transfers, activity, and Help together.
 
-![Grounded transaction history](docs/screenshots/chatbot-corebank-history.png)
-
-CoreBank separates the customer portal from the operations console.
-
-![CoreBank portal](docs/screenshots/corebank-portal.png)
+![Customer workspace](docs/screenshots/customer-workspace.png)
 
 Operations staff can review customers, accounts, KYC state, and account activity
 risk signals.
@@ -27,12 +59,14 @@ risk signals.
 
 ```mermaid
 flowchart LR
-    C["Customer"] --> UI["Streamlit UI"]
-    UI -->|"JWT"| AI["FastAPI agent"]
+    C["Customer"] --> UI["CoreBank portal"]
+    UI --> CB["Spring Boot CoreBank"]
+    CB -->|"authenticated Help request"| AI["FastAPI agent"]
+    S["Standalone Streamlit"] -->|"JWT"| AI
     AI --> R["Intent router"]
     R -. "optional" .-> LLM["OpenAI-compatible LLM"]
     R --> T["Approved tools"]
-    T -->|"service token"| CB["Spring Boot CoreBank"]
+    T -->|"service token"| CB
     T --> FAQ["Approved policies"]
     T --> ADB["Agent database"]
     CB --> CDB["CoreBank database"]
@@ -48,8 +82,9 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 - **Grounded financial responses:** account facts are fetched through CoreBank tools
   and rendered with deterministic templates.
-- **Customer-scoped access:** FastAPI validates JWTs, and CoreBank rechecks ownership
-  before returning account data to the AI service.
+- **Customer-scoped access:** CoreBank authenticates the portal customer, FastAPI
+  verifies the internal support request, and CoreBank rechecks account ownership.
+  The standalone Streamlit client uses FastAPI JWT authentication.
 - **Banking integrity controls:** money uses decimal types, transfers are transactional,
   failed attempts are persisted, and optimistic locking prevents silent balance loss.
 
@@ -59,56 +94,9 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 |---|---|
 | Core banking | Java 21, Spring Boot, Spring Security, JPA, Flyway |
 | Agent API | Python 3.12, FastAPI, Pydantic, SQLAlchemy, Alembic |
-| UI | Streamlit |
+| UI | CoreBank web portal, standalone Streamlit playground |
 | Data | PostgreSQL in Docker Compose; local SQLite/H2 demo modes |
 | Quality | Pytest, JUnit, Ruff, mypy, GitHub Actions |
-
-## Quick start
-
-Requirements:
-
-- Docker Desktop with Compose
-- Or Python 3.12 and JDK 21 for direct local development
-
-Run the full stack:
-
-```bash
-cp .env.example .env
-docker compose up --build
-```
-
-On Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-docker compose up --build
-```
-
-Open:
-
-- Chatbot UI: <http://127.0.0.1:8501>
-- CoreBank portal: <http://127.0.0.1:8080>
-- FastAPI docs: <http://127.0.0.1:8000/docs>
-- CoreBank API docs: <http://127.0.0.1:8080/swagger-ui.html>
-
-The Compose stack starts two PostgreSQL databases, CoreBank, demo seeding, FastAPI,
-Alembic migrations, and Streamlit.
-
-## Example requests
-
-Select demo customer `U002` in the chatbot and ask:
-
-1. `What is my account balance?`
-2. `Show my transactions.`
-3. `Why did my failed withdrawal fail?`
-4. `What is my KYC status?`
-5. `Review account activity risk.`
-6. `Open a support case for the failed payment.`
-7. `Show me U001's account balance.`
-
-The final request should be denied because it asks for another customer's record.
-
-Demo script: [docs/DEMO.md](docs/DEMO.md)
 
 ## LLM modes
 

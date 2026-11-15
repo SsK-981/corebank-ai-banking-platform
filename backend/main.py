@@ -1,8 +1,9 @@
 """FastAPI application for the Fintech AI Agent Chatbot."""
 
+import hmac
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Depends, FastAPI, Header, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -160,6 +161,44 @@ def chat(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="The support agent could not process this request.",
         ) from exc
+
+
+@app.post("/internal/support/chat", response_model=ChatResponse, include_in_schema=False)
+def internal_support_chat(
+    payload: ChatRequest,
+    service_token: str | None = Header(default=None, alias="X-Support-Service-Token"),
+    customer_email: str | None = Header(default=None, alias="X-Authenticated-Customer-Email"),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Same-origin CoreBank bridge; identity is supplied only by trusted Spring service."""
+    if not service_token or not hmac.compare_digest(
+        service_token.encode("utf-8"), settings.support_service_token.encode("utf-8")
+    ):
+        raise HTTPException(status_code=401, detail="Invalid support service credentials")
+    if settings.is_production or settings.banking_data_source != "corebank":
+        raise HTTPException(status_code=503, detail="CoreBank support is unavailable")
+    if not customer_email:
+        raise HTTPException(status_code=400, detail="Authenticated customer email is required")
+    normalized_email = customer_email.strip().casefold()
+    user_id = next(
+        (
+            key
+            for key, email in settings.corebank_customer_emails.items()
+            if email.casefold() == normalized_email
+        ),
+        None,
+    )
+    if user_id is None:
+        raise HTTPException(
+            status_code=403,
+            detail="Support chat is available only for the configured CoreBank demo customers.",
+        )
+    principal = Principal(
+        subject=f"corebank-customer:{normalized_email}",
+        user_id=user_id,
+        roles=frozenset({"customer"}),
+    )
+    return chat(payload, principal, db)
 
 
 @app.get("/transactions/{transaction_id}", response_model=TransactionResponse)

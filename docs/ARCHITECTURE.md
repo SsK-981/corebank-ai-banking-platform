@@ -9,8 +9,10 @@ demo client and never talks directly to either database.
 
 ## Request lifecycle
 
-1. Streamlit obtains a development JWT or receives an externally issued production JWT.
-2. FastAPI validates the token and resolves the signed-in customer.
+1. The CoreBank customer portal sends Help requests to Spring on the same origin.
+   Spring uses the authenticated customer and supplies the identity and service
+   credential server-side. FastAPI maps that email to a seeded customer ID.
+2. For standalone Streamlit, FastAPI validates a development or externally issued JWT.
 3. The local router handles safety and obvious intents before optional LLM routing.
 4. The orchestrator selects a narrowly scoped tool.
 5. CoreBank authenticates the AI service and independently verifies customer ownership.

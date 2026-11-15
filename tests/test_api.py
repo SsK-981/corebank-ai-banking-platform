@@ -7,6 +7,57 @@ def test_health_is_public(client):
     assert response.json()["status"] == "ready"
 
 
+def test_internal_support_bridge_maps_server_supplied_demo_identity(client, monkeypatch):
+    from dataclasses import replace
+
+    from backend import main
+
+    monkeypatch.setattr(main, "settings", replace(main.settings, banking_data_source="corebank"))
+    token = main.settings.support_service_token
+    response = client.post(
+        "/internal/support/chat",
+        headers={
+            "X-Support-Service-Token": token,
+            "X-Authenticated-Customer-Email": "rahul@example.com",
+        },
+        json={"message": "hi"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["conversation_id"]
+
+
+def test_internal_support_bridge_rejects_unknown_customer(client, monkeypatch):
+    from dataclasses import replace
+
+    from backend import main
+
+    monkeypatch.setattr(main, "settings", replace(main.settings, banking_data_source="corebank"))
+    response = client.post(
+        "/internal/support/chat",
+        headers={
+            "X-Support-Service-Token": main.settings.support_service_token,
+            "X-Authenticated-Customer-Email": "new-customer@example.com",
+        },
+        json={"message": "hi"},
+    )
+    assert response.status_code == 403
+    assert "demo customers" in response.json()["detail"]
+
+
+def test_internal_support_bridge_requires_token_and_corebank_mode(client):
+    from backend import main
+
+    headers = {
+        "X-Support-Service-Token": main.settings.support_service_token,
+        "X-Authenticated-Customer-Email": "rahul@example.com",
+    }
+    assert client.post("/internal/support/chat", json={"message": "hi"}).status_code == 401
+    assert (
+        client.post("/internal/support/chat", headers=headers, json={"message": "hi"}).status_code
+        == 503
+    )
+
+
 def test_customer_endpoints_require_authentication(client):
     assert client.get("/transactions/TXN1002").status_code == 401
     assert client.post("/chat", json={"message": "hello"}).status_code == 401

@@ -1,33 +1,22 @@
 # 90-second demo
 
-## Setup
+Run `docker compose up --build` from the repository and open
+[CoreBank](http://localhost:8080) after the seed service completes.
 
-```powershell
-docker compose up --build
-```
+1. **Overview.** Select **Try demo account** to sign in as Amit. Show the active account
+   and balance.
+2. **Transfer.** Use Rahul’s account number from `docker compose logs corebank-seed`.
+   Make a small demo transfer and note the reference in the confirmation.
+3. **Activity.** Find the new transfer and the seeded failed withdrawal. Download a
+   CSV statement if needed.
+4. **Help.** Ask “Show my transactions” or “What is my KYC status?” from the same
+   portal. Expand agent activity to see the tool used.
+5. **Escalation.** Ask “Open a support ticket for my failed withdrawal.” Show the ticket
+   ID. The standalone [operations dashboard](http://localhost:8501) can inspect tickets.
 
-Open CoreBank at `http://127.0.0.1:8080` and the chatbot at
-`http://127.0.0.1:8501`.
+## Suggested interview questions
 
-## Script
-
-1. **Architecture:** “CoreBank is the Java system of record. FastAPI is the grounded AI
-   orchestration layer. The model never receives database access.”
-2. **Live balance:** select U002 and ask `What is my account balance?`.
-3. **Live history:** ask `Show my transactions.` Point out the persisted failed attempt.
-4. **KYC:** ask `What is my KYC status?`. Change it in the CoreBank admin portal and ask
-   again to demonstrate live integration.
-5. **Account activity risk:** ask `Review account activity risk.` and expand agent
-   activity to show the tool used.
-6. **Authorization:** ask for `U001` while signed in as U002; the request is refused.
-7. **Escalation:** ask `Open a support case for this failed payment.` Show the ticket ID.
-8. **Grounding:** explain that tool-backed responses skip LLM rewriting, while greetings
-   can still use DeepSeek for natural tone.
-
-## Suggested interviewer questions
-
-- Why is `@Transactional` insufficient by itself for concurrent withdrawals?
-- Why does the AI service use a service credential instead of customer passwords?
-- What happens when DeepSeek is unavailable?
-- Which database owns KYC and transaction status?
-- How would production OIDC, mTLS, rate limiting, and monitoring be added?
+- How does the support service get the customer identity?
+- Which service owns the balance and transaction status?
+- What does the customer see if the support service is unavailable?
+- How do transactional transfers and optimistic locking protect balances?

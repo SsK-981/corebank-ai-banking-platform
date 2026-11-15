@@ -37,8 +37,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: ${COREBANK_POSTGRES_PASSWORD:-local-corebank-password}
       APP_ADMIN_CODE: ${COREBANK_ADMIN_CODE:-admin123}
       COREBANK_SERVICE_TOKEN: ${COREBANK_SERVICE_TOKEN:-local-corebank-service-token-change-me}
+      SUPPORT_API_URL: http://backend:8000
+      SUPPORT_SERVICE_TOKEN: ${SUPPORT_SERVICE_TOKEN:-local-support-service-token-change-me}
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     depends_on:
       corebank-database:
         condition: service_healthy
@@ -82,6 +84,7 @@ services:
       COREBANK_BASE_URL: http://corebank:8080
       COREBANK_SERVICE_TOKEN: ${COREBANK_SERVICE_TOKEN:-local-corebank-service-token-change-me}
       COREBANK_FALLBACK_TO_LOCAL: "false"
+      SUPPORT_SERVICE_TOKEN: ${SUPPORT_SERVICE_TOKEN:-local-support-service-token-change-me}
       COREBANK_USER_U001_EMAIL: rahul@example.com
       COREBANK_USER_U002_EMAIL: amit@example.com
       COREBANK_USER_U003_EMAIL: neha@example.com
@@ -103,7 +106,7 @@ services:
       SEED_DEMO_DATA: "true"
       CORS_ORIGINS: http://localhost:8501,http://127.0.0.1:8501
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -125,7 +128,7 @@ services:
       FINTECH_DEV_AUTH: "true"
       BANKING_DATA_SOURCE: corebank
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     depends_on:
       backend:
         condition: service_healthy
