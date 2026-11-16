@@ -383,8 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const user = await request('/auth/customer/me');
       setSession(email, password, user);
       hideMessage('login-result');
-      await loadAccounts();
       navigate('overview');
+      await loadAccounts();
     } catch (error) {
       session = null;
       message('login-result', error.message, false);
@@ -395,9 +395,13 @@ document.addEventListener('DOMContentLoaded', () => {
     await login($('login-email').value, $('login-password').value);
   });
   $('demo-login').addEventListener('click', async () => {
-    $('login-email').value = 'amit@example.com';
-    $('login-password').value = 'password123';
-    await login('amit@example.com', 'password123');
+    const button = $('demo-login');
+    button.disabled = true;
+    try {
+      await login($('demo-customer').value, 'password123');
+    } finally {
+      button.disabled = false;
+    }
   });
   $('register-form').addEventListener('submit', async (e) => {
     e.preventDefault();

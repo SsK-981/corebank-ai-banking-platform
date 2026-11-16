@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 :root {
   --ink: #172b2b;
   --muted: #748582;
@@ -11,7 +11,7 @@
   --gold: #f2c978;
   --red: #bd4949;
   --shadow: 0 12px 36px rgba(23, 53, 46, 0.055);
-  font-family: "DM Sans", sans-serif;
+  font-family: 'DM Sans', sans-serif;
   color: var(--ink);
 }
 * {
@@ -49,7 +49,7 @@ button {
   text-decoration: none;
   color: var(--ink);
   font:
-    800 20px "DM Sans",
+    800 20px 'DM Sans',
     sans-serif;
   letter-spacing: -0.7px;
 }
@@ -62,7 +62,7 @@ button {
   color: #fff;
   border-radius: 13px;
   font:
-    800 21px "DM Sans",
+    800 21px 'DM Sans',
     sans-serif;
 }
 .admin-link {
@@ -101,7 +101,7 @@ p {
 }
 .welcome-copy h1 {
   font:
-    700 clamp(42px, 5.3vw, 66px)/1.08 "DM Sans",
+    700 clamp(42px, 5.3vw, 66px)/1.08 'DM Sans',
     sans-serif;
   letter-spacing: -3px;
   margin-bottom: 22px;
@@ -166,7 +166,7 @@ p {
 }
 .auth-card h2 {
   font:
-    700 24px "DM Sans",
+    700 24px 'DM Sans',
     sans-serif;
   letter-spacing: -0.6px;
   margin-bottom: 6px;
@@ -245,19 +245,14 @@ p {
   background: #f5f8f6;
   border-radius: 11px;
 }
-.demo-box strong {
+.demo-box label {
+  grid-column: 1 / -1;
   font-size: 12px;
+  font-weight: 700;
 }
-.demo-box p {
-  margin: 4px 0 0;
-  color: var(--muted);
-  font-size: 11px;
-}
-.demo-box small {
-  grid-column: 1/-1;
-  color: #82918d;
-  font-size: 10px;
-  padding-top: 8px;
+.demo-box select {
+  width: 100%;
+  min-width: 0;
 }
 .text-button {
   background: transparent;
@@ -429,7 +424,7 @@ p {
 }
 .app-header h1 {
   font:
-    700 25px "DM Sans",
+    700 25px 'DM Sans',
     sans-serif;
   letter-spacing: -0.8px;
   margin: 0;
@@ -480,7 +475,7 @@ p {
 .greeting-row h2,
 .section-intro h2 {
   font:
-    700 21px "DM Sans",
+    700 21px 'DM Sans',
     sans-serif;
   letter-spacing: -0.5px;
   margin: 0;
@@ -555,7 +550,7 @@ button:focus-visible {
 }
 .account-card h3 {
   font:
-    600 12px "DM Sans",
+    600 12px 'DM Sans',
     sans-serif;
   margin: 22px 0 5px;
 }
@@ -571,7 +566,7 @@ button:focus-visible {
 }
 .account-balance {
   font:
-    700 23px "DM Sans",
+    700 23px 'DM Sans',
     sans-serif;
   margin-top: 3px;
 }
@@ -593,7 +588,7 @@ button:focus-visible {
 }
 .card-heading h3 {
   font:
-    700 16px "DM Sans",
+    700 16px 'DM Sans',
     sans-serif;
   margin: 0;
 }
@@ -820,7 +815,7 @@ button:focus-visible {
   background: var(--green);
   color: #fff;
   font:
-    700 17px "DM Sans",
+    700 17px 'DM Sans',
     sans-serif;
 }
 .support-header strong,
@@ -932,7 +927,7 @@ button:focus-visible {
 }
 .confirm-dialog h2 {
   font:
-    700 20px "DM Sans",
+    700 20px 'DM Sans',
     sans-serif;
   margin: 17px 0 8px;
 }

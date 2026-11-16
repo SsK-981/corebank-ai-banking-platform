@@ -42,7 +42,8 @@ Other local surfaces:
   [CoreBank API docs](http://localhost:8080/swagger-ui.html)
 
 The seeded data, accounts, and defaults are intended for local development.
-See [the walkthrough](docs/DEMO.md) for a complete demo.
+See [the manual testing guide](docs/MANUAL_TESTING.md) for the shared test accounts
+and [the walkthrough](docs/DEMO.md) for a complete demo.
 
 ## Screenshots
 

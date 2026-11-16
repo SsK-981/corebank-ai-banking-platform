@@ -36,3 +36,13 @@ After reviewing the branch, publish it to the existing GitHub repository and
 verify the Docker Compose quick start. Extending Help to newly registered
 customers requires replacing the seeded identity map and provisioning support
 records for those identities.
+
+## Manual testing accounts
+
+Use U001 (Rahul), U002 (Amit), and U003 (Neha) as the stable test identities
+across portal, integrated Help, and CoreBank-mode Streamlit. The sign-in picker
+and docs/MANUAL_TESTING.md describe the fixture. Demo credentials and identities
+are fixed, while account numbers are generated per database. An isolated local
+manual-testing instance was seeded with a persistent H2 and SQLite database.
+Live Chrome checks confirmed all three picker identities in Overview and Help
+after signing out and switching. The Python suite and opt-in live test passed.
