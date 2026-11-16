@@ -304,11 +304,18 @@
                   >Recipient account number<input
                     type="text"
                     id="transfer-to"
+                    aria-describedby="recipient-preview"
                     inputmode="numeric"
                     autocomplete="off"
                     placeholder="Enter account number"
-                    required /></label
-                ><label
+                    required
+                /></label>
+                <p
+                  id="recipient-preview"
+                  class="message hidden"
+                  role="status"
+                ></p>
+                <label
                   >Amount<span class="currency-input"
                     ><span>₹</span
                     ><input

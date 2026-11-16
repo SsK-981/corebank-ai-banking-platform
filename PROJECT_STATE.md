@@ -46,3 +46,13 @@ are fixed, while account numbers are generated per database. An isolated local
 manual-testing instance was seeded with a persistent H2 and SQLite database.
 Live Chrome checks confirmed all three picker identities in Overview and Help
 after signing out and switching. The Python suite and opt-in live test passed.
+
+## Recipient preview
+
+The transfer form looks up a complete recipient number from the signed-in
+customer's active source account and displays a masked name. Review repeats
+the lookup for the current source and recipient and shows the name with the
+amount. Unknown and closed destinations share an unavailable response.
+Verified with 20 Java tests and a Chrome walkthrough on a fresh synthetic
+database. The persistent localhost instance was restarted with its existing
+test accounts and verified to return Neha's masked name without a transfer.

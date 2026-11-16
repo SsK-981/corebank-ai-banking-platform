@@ -10,6 +10,10 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentAccount = null;
   let conversationId = null;
   let pendingTransfer = null;
+  let recipientLookupTimer;
+  let recipientLookup;
+  const sameAccountMessage =
+    'The recipient account must be different from the source account.';
   let transactionRequest = 0;
   const $ = (id) => document.getElementById(id);
 
@@ -105,6 +109,7 @@ document.addEventListener('DOMContentLoaded', () => {
     conversationId = null;
     pendingTransfer = null;
     transactionRequest++;
+    clearRecipientPreview();
     for (const id of ['account-cards', 'recent-transactions', 'activity-list'])
       $(id).replaceChildren();
     for (const id of [
@@ -587,11 +592,56 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  $('transfer-form').addEventListener('submit', (e) => {
+  function transferSource() {
+    return accounts.find(
+      (account) => String(account.accountId) === $('transfer-from').value,
+    );
+  }
+
+  function clearRecipientPreview() {
+    clearTimeout(recipientLookupTimer);
+    recipientLookup?.abort();
+    hideMessage('recipient-preview');
+  }
+
+  async function lookupRecipient(from, to, signal) {
+    const query = new URLSearchParams({ accountNumber: to });
+    return request(
+      `/customer/accounts/${from.accountId}/transfer-recipient?${query}`,
+      { signal },
+    );
+  }
+
+  function showRecipientPreview() {
+    clearRecipientPreview();
+    hideMessage('transfer-result');
+    const from = transferSource();
+    const to = $('transfer-to').value.trim();
+    if (!from || !/^\d{12}$/.test(to)) return;
+    if (to === from.accountNumber) {
+      message('recipient-preview', sameAccountMessage, false);
+      return;
+    }
+
+    recipientLookup = new AbortController();
+    const { signal } = recipientLookup;
+    recipientLookupTimer = setTimeout(async () => {
+      try {
+        const recipient = await lookupRecipient(from, to, signal);
+        if (!signal.aborted) {
+          message('recipient-preview', `Recipient: ${recipient.maskedName}`);
+        }
+      } catch (error) {
+        if (!signal.aborted) message('recipient-preview', error.message, false);
+      }
+    }, 250);
+  }
+
+  $('transfer-to').addEventListener('input', showRecipientPreview);
+  $('transfer-from').addEventListener('change', showRecipientPreview);
+  $('transfer-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const from = accounts.find(
-        (a) => String(a.accountId) === $('transfer-from').value,
-      ),
+    const from = transferSource(),
       to = $('transfer-to').value.trim(),
       amount = Number($('transfer-amount').value);
     if (!from)
@@ -606,24 +656,43 @@ document.addEventListener('DOMContentLoaded', () => {
         'Enter a valid account number using digits only.',
         false,
       );
-    if (to === from.accountNumber)
-      return message(
-        'transfer-result',
-        'The recipient account must be different from the source account.',
-        false,
-      );
+    if (to === from.accountNumber) {
+      return message('transfer-result', sameAccountMessage, false);
+    }
     if (!Number.isFinite(amount) || amount <= 0)
       return message(
         'transfer-result',
         'Enter an amount greater than zero.',
         false,
       );
-    pendingTransfer = { from, to, amount: amount.toFixed(2) };
-    $('confirm-dialog').returnValue = '';
-    $('dialog-title').textContent = 'Review transfer';
-    $('dialog-copy').textContent =
-      `Send ${money.format(amount)} from ${from.holderName} (${from.accountNumber}) to account ${to}?`;
-    $('confirm-dialog').showModal();
+    clearRecipientPreview();
+    hideMessage('transfer-result');
+    recipientLookup = new AbortController();
+    const { signal } = recipientLookup;
+    const submit = e.currentTarget.querySelector('button[type="submit"]');
+    submit.disabled = true;
+    try {
+      const recipient = await lookupRecipient(from, to, signal);
+      if (signal.aborted) return;
+      if (
+        transferSource()?.accountId !== from.accountId ||
+        $('transfer-to').value.trim() !== to ||
+        Number($('transfer-amount').value) !== amount
+      )
+        return;
+
+      message('recipient-preview', `Recipient: ${recipient.maskedName}`);
+      pendingTransfer = { from, to, amount: amount.toFixed(2) };
+      $('confirm-dialog').returnValue = '';
+      $('dialog-title').textContent = 'Review transfer';
+      $('dialog-copy').textContent =
+        `Send ${money.format(amount)} from ${from.holderName} (${from.accountNumber}) to ${recipient.maskedName} (${to})?`;
+      $('confirm-dialog').showModal();
+    } catch (error) {
+      if (!signal.aborted) message('transfer-result', error.message, false);
+    } finally {
+      submit.disabled = false;
+    }
   });
   $('confirm-dialog').addEventListener('close', async () => {
     const transfer = pendingTransfer;
@@ -645,6 +714,7 @@ document.addEventListener('DOMContentLoaded', () => {
       );
       currentAccount = result.fromAccount;
       $('transfer-form').reset();
+      clearRecipientPreview();
       renderAccounts();
       await loadTransactions();
       message(

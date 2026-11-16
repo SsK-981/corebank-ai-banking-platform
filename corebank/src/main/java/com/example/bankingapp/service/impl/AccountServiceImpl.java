@@ -8,6 +8,7 @@ import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
 import com.example.bankingapp.dto.RiskSignalResponse;
 import com.example.bankingapp.dto.TransactionResponse;
+import com.example.bankingapp.dto.TransferRecipientResponse;
 import com.example.bankingapp.dto.TransferRequest;
 import com.example.bankingapp.dto.TransferResponse;
 import com.example.bankingapp.dto.UpdateAccountRequest;
@@ -206,6 +207,30 @@ public class AccountServiceImpl implements AccountService {
         ));
 
         return BankingMapper.toAccountResponse(bankAccountRepository.save(account));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public TransferRecipientResponse previewTransferRecipient(Long sourceAccountId, String accountNumber, String username) {
+        BankAccount source = findAccount(sourceAccountId);
+        ensureOwnerOrAdmin(source, username, false);
+        ensureActive(source);
+
+        if (!accountNumber.matches("[0-9]{12}")) {
+            throw new InvalidTransactionException("Enter a valid 12-digit account number.");
+        }
+        if (source.getAccountNumber().equals(accountNumber)) {
+            throw new InvalidTransactionException("The recipient account must be different from the source account.");
+        }
+
+        BankAccount recipient = bankAccountRepository.findByAccountNumber(accountNumber)
+                .filter(BankAccount::isActive)
+                .orElseThrow(() -> new AccountNotFoundException("No eligible recipient was found for this account number."));
+        String[] names = recipient.getHolderName().strip().split("\\s+", 2);
+        String surname = names.length == 2 ? names[1] : names[0];
+        String initial = surname.substring(0, surname.offsetByCodePoints(0, 1));
+        String maskedName = names.length == 2 ? names[0] + " " + initial + "•••" : initial + "•••";
+        return new TransferRecipientResponse(maskedName);
     }
 
     @Override

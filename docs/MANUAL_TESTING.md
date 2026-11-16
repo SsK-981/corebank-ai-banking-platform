@@ -19,7 +19,9 @@ U002, or U003 identity. Each ID resolves to the same CoreBank customer.
 ## First manual pass
 
 1. As Rahul, copy the account number from Overview. Sign out.
-2. As Neha, send ₹500 to that number. Check the outgoing entry in Activity.
+2. As Neha, enter that number and confirm that **Recipient: Rahul S•••**
+   appears. Choose **Review transfer**, confirm the name and amount, then send
+   ₹500. Check the outgoing entry in Activity.
 3. Sign in as Rahul and check that ₹500 appears as an incoming transfer.
 4. As Amit, ask Help “What is my KYC status?” and confirm it says pending
    on a fresh database. Ask “Open a support ticket for my failed withdrawal.”

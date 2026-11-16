@@ -5,6 +5,7 @@ import com.example.bankingapp.dto.CreateAccountRequest;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
 import com.example.bankingapp.dto.TransactionResponse;
+import com.example.bankingapp.dto.TransferRecipientResponse;
 import com.example.bankingapp.dto.TransferRequest;
 import com.example.bankingapp.dto.TransferResponse;
 import com.example.bankingapp.dto.UpdateAccountRequest;
@@ -12,6 +13,7 @@ import com.example.bankingapp.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -61,6 +63,14 @@ public class CustomerAccountController {
                                     @Valid @RequestBody MoneyRequest request,
                                     Authentication authentication) {
         return accountService.withdraw(accountId, request, authentication.getName(), false);
+    }
+
+    @GetMapping("/{accountId}/transfer-recipient")
+    public ResponseEntity<TransferRecipientResponse> previewTransferRecipient(
+            @PathVariable Long accountId, @RequestParam String accountNumber, Authentication authentication) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(accountService.previewTransferRecipient(accountId, accountNumber, authentication.getName()));
     }
 
     @PostMapping("/transfer")

@@ -7,6 +7,7 @@ import com.example.bankingapp.dto.CreateAccountRequest;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
 import com.example.bankingapp.dto.TransactionResponse;
+import com.example.bankingapp.dto.TransferRecipientResponse;
 import com.example.bankingapp.dto.TransferRequest;
 import com.example.bankingapp.dto.TransferResponse;
 import com.example.bankingapp.dto.UpdateAccountRequest;
@@ -32,6 +33,8 @@ public interface AccountService {
     AccountResponse deposit(Long accountId, MoneyRequest request, String username, boolean admin);
 
     AccountResponse withdraw(Long accountId, MoneyRequest request, String username, boolean admin);
+
+    TransferRecipientResponse previewTransferRecipient(Long sourceAccountId, String accountNumber, String username);
 
     TransferResponse transfer(TransferRequest request, String username, boolean admin);
 

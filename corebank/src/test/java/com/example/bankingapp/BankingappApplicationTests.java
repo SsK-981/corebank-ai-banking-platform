@@ -77,6 +77,36 @@ class BankingappApplicationTests {
     }
 
     @Test
+    void transferPreviewOnlyReturnsAMaskedNameForAnEligibleRecipient() throws Exception {
+        String senderEmail = registerCustomer();
+        String recipientEmail = registerCustomer();
+        AccountResponse sender = accountService.createAccount(
+                new CreateAccountRequest("Portal Sender", BigDecimal.ZERO), senderEmail);
+        AccountResponse recipient = accountService.createAccount(
+                new CreateAccountRequest("Neha Patil", BigDecimal.ZERO), recipientEmail);
+        String endpoint = "/customer/accounts/" + sender.accountId() + "/transfer-recipient";
+
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber())
+                        .with(httpBasic(recipientEmail, "password123")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(endpoint).param("accountNumber", sender.accountNumber())
+                        .with(httpBasic(senderEmail, "password123")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber())
+                        .with(httpBasic(senderEmail, "password123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedName").value("Neha P•••"))
+                .andExpect(jsonPath("$.length()").value(1));
+
+        accountService.closeAccount(recipient.accountId(), recipientEmail, false);
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber())
+                        .with(httpBasic(senderEmail, "password123")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
     void customerCannotAccessAdminEndpoints() throws Exception {
         String email = registerCustomer();
 
