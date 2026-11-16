@@ -134,3 +134,18 @@ completed Activity → failed withdrawal explanation → case confirmation →
 case lookup after reload. PostgreSQL exposed foreign-key write ordering in
 demo startup and conversation creation. Both were fixed and retested.
 The persistent manual demo was restarted with the existing accounts and data.
+
+## Pre-fix chatbot audit
+
+Audited committed baseline `27f9c89` against a separate synthetic local stack.
+Ran 55 API scenarios across 95 chat turns (30 pass, 12 partial, 13 gaps)
+and six Chrome checks (three pass, three gaps). Replayed the user's wording
+with the same kinds of synthetic transactions. The manual database was untouched.
+
+Confirmed priorities: require a substantive case reason, allow it to be read
+later, invalidate cancelled offers, handle failed-transaction listings without
+treating ordinary words as references, and guide users to statement export.
+Also observed lost context after reload, missing browser Back behavior, and
+no retry button on transport failure. All seven access checks and concurrent
+confirmation deduplication passed. The paused app edits are checkpointed
+outside the checkout. No application fixes were deployed during this audit.
