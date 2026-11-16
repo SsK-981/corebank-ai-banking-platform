@@ -58,7 +58,9 @@ public class CustomerSupportController {
             if (exception instanceof HttpStatusCodeException upstream) {
                 if (upstream.getStatusCode().value() == 403) {
                     status = HttpStatus.FORBIDDEN;
-                    message = "Support chat is available only for the configured CoreBank demo customers.";
+                    message = upstream.getResponseBodyAsString().contains("Conversation access denied")
+                            ? "This conversation is unavailable for your account."
+                            : "Support chat is available only for the configured CoreBank demo customers.";
                 } else if (upstream.getStatusCode().value() == 503) {
                     status = HttpStatus.SERVICE_UNAVAILABLE;
                 } else if (upstream.getStatusCode().is4xxClientError()

@@ -60,6 +60,6 @@ same retry is safe if the first request already committed.
 
 Activity can pass a transaction reference to the signed-in support bridge.
 FastAPI looks up the customer’s record and remembers the verified reference
-within that conversation. A case requires explicit confirmation and links to
-the selected reference. The support database stores the case and its link
+within that conversation. A case requires an issue description and explicit confirmation. Transaction cases
+link to the selected reference, and a cancelled draft cannot be confirmed. The support database stores the case and its link
 together. Asking for an update reads the customer’s existing cases.

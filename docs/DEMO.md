@@ -11,7 +11,7 @@ Run `docker compose up --build` from the repository and open
    CSV statement if needed.
 4. **Help.** In Activity, select **Get help** on Amit’s failed withdrawal. Ask “Why
    did that one fail?” The assistant uses the selected record to explain the decline.
-5. **Escalation.** Select **Open a support case** and confirm. Show the case ID. Use
+5. **Escalation.** Select **Open a support case**, describe the issue, and confirm the summary. Show the case ID. Use
    **My cases** to find the same case and its status. The standalone
    [operations dashboard](http://localhost:8501) can inspect tickets.
 

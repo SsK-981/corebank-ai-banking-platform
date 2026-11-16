@@ -918,6 +918,12 @@ button:focus-visible {
   font-size: 11px;
   margin-bottom: 3px;
 }
+.help-case-summary {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
 .case-offer {
   display: flex;
   align-items: center;
@@ -996,6 +1002,43 @@ button:focus-visible {
   background: var(--green);
   color: white;
   border-bottom-right-radius: 4px;
+}
+.help-case-confirmation {
+  width: min(90%, 430px);
+  border: 1px solid #b9d8c8;
+  border-left: 4px solid var(--green);
+  border-radius: 10px;
+  padding: 11px 13px;
+  background: #f1f8f4;
+  color: var(--ink);
+}
+.help-case-confirmation strong {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 12px;
+}
+.help-case-confirmation p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.chat-next-actions,
+.chat-retry {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 16px;
+}
+.chat-next-actions .quiet-button,
+.chat-retry .quiet-button {
+  min-height: 34px;
+  font-size: 11px;
+}
+.chat-retry {
+  justify-content: space-between;
+  color: #9b382e;
+  font-size: 11px;
 }
 .chat-form {
   display: flex;

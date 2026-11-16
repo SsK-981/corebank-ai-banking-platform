@@ -86,8 +86,11 @@ def test_transaction_help_keeps_context_and_confirms_one_case():
     refund = chat("Will I get that money back?", **context)
     assert "not debited" in refund["response"].lower(), refund
     offer = chat("Open a support case", **context)
-    assert offer["case_offer"] is True
+    assert offer["case_offer"] is False
     assert offer["ticket_id"] is None
+    offer = chat("The ATM declined my withdrawal", **context)
+    assert offer["case_offer"] is True
+    assert offer["case_summary"] == "The ATM declined my withdrawal"
     after_offer = chat("My cases", action="list_cases")
     assert {case["ticket_id"] for case in after_offer["cases"]} == prior_case_ids
 

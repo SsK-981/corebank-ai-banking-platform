@@ -24,6 +24,8 @@ class ChatResponse(BaseModel):
     selected_transaction: dict | None = None
     transaction_options: list[dict] = Field(default_factory=list)
     case_offer: bool = False
+    case_summary: str | None = None
+    next_action: Literal["download_statement", "open_transfer"] | None = None
     cases: list[dict] = Field(default_factory=list)
 
 

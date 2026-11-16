@@ -149,3 +149,18 @@ Also observed lost context after reload, missing browser Back behavior, and
 no retry button on transport failure. All seven access checks and concurrent
 confirmation deduplication passed. The paused app edits are checkpointed
 outside the checkout. No application fixes were deployed during this audit.
+
+## Help fixes after the audit
+
+Help collects the issue before offering case confirmation, shows the summary,
+reads the saved reason, and invalidates cancelled drafts. Real reference formats
+are separated from ordinary failure language. Failed-transaction requests list
+only failed records, statement and transfer requests point to portal actions,
+and unclear requests ask a focused question. The browser restores the current
+tab's transcript and verified selection, supports Back and Forward, and retries
+the same request after a transport failure.
+
+The isolated retest passed all 55 API scenarios (95 turns) and all six Chrome
+checks, including mobile layout, persistence and successful retry. Java tests
+(23) and Python tests (69, plus three opt-in integration skips) passed.
+The before and after results are saved in the task outputs.

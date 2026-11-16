@@ -13,9 +13,72 @@ from backend.conversations import add_audit_log
 from backend.models import SupportCaseTransaction, Ticket
 from backend.schemas import ChatRequest
 from backend.security import Principal
-from backend.tools import get_transaction_status, list_user_transactions, summarize_customer_issue
+from backend.tools import get_transaction_status, list_user_transactions
 
-_TRANSACTION_REFERENCE = re.compile(r"\b(?:TXN|FAIL)[A-Z0-9]+\b", re.IGNORECASE)
+_TRANSACTION_REFERENCE = re.compile(
+    r"\b(?:FAIL[0-9A-F]{16}|TXN(?:[0-9A-F]{16}[SR]?|[0-9]{4}))\b", re.IGNORECASE
+)
+
+_CASE_REQUEST = re.compile(
+    r"\b(?:(?:open|create|raise|file) (?:a |an |the )?(?:support )?(?:case|ticket|complaint)"
+    r"|talk to support|speak to (?:a person|someone)|escalate (?:this|my complaint)"
+    r"|dispute this)\b",
+    re.IGNORECASE,
+)
+_CASE_DETAILS = re.compile(r"\bTCK-[A-Z0-9]+\b", re.IGNORECASE)
+_FAILED_LIST = re.compile(
+    r"\b(?:failed|declined) (?:transactions?|transcations?|transfers?|payments?)\b"
+)
+_DRAFT_KEYS = ("case_description", "case_awaiting_issue", "case_offer", "case_offer_transaction")
+
+
+def _clear_case_draft(context: dict) -> None:
+    for key in _DRAFT_KEYS:
+        context.pop(key, None)
+
+
+def _meaningful_issue(text: str) -> bool:
+    words = re.findall(r"\b[\w’']+\b", text.casefold())
+    return len(words) >= 4 and not (
+        _CASE_REQUEST.fullmatch(text.strip(" ?."))
+        or re.fullmatch(
+            r"(?:yes|okay|ok|sure|thanks|thank you|please|hi|hello|help)(?:[ ,.?!]+.*)?", text, re.I
+        )
+    )
+
+
+def _issue_from_request(message: str, request: re.Match[str]) -> str:
+    suffix = _TRANSACTION_REFERENCE.sub("", message[request.end() :]).strip()
+    match = re.match(r"(?:for\s*)?(?:[:—-]\s*|because\s+|about\s+|to\s+)", suffix, re.I)
+    return suffix[match.end() :].strip() if match else ""
+
+
+def _prepare_case(context: dict, issue: str = "") -> dict:
+    context["case_offer_transaction"] = context.get("selected_transaction")
+    if not _meaningful_issue(issue):
+        context["case_awaiting_issue"] = True
+        context.pop("case_offer", None)
+        context.pop("case_description", None)
+        return _reply(
+            "I can help you open a support case. What happened?",
+            selected_transaction=context.get("selected_transaction"),
+        )
+    context.pop("case_awaiting_issue", None)
+    context["case_description"] = " ".join(issue.split())
+    context["case_offer"] = True
+    return _reply(
+        "Review the summary below, then confirm if you’d like me to open the case.",
+        case_offer=True,
+        case_summary=context["case_description"],
+        selected_transaction=context.get("selected_transaction"),
+    )
+
+
+def _saved_summary(description: str) -> str | None:
+    request = _CASE_REQUEST.search(description)
+    if request and not _issue_from_request(description, request):
+        return None
+    return description.strip() or None
 
 
 def _transaction_card(transaction: dict) -> dict:
@@ -42,6 +105,7 @@ def _case_list(db: Session, user_id: str) -> list[dict]:
             "status": ticket.status,
             "issue_type": ticket.issue_type,
             "transaction_reference": reference,
+            "summary": _saved_summary(ticket.description),
         }
         for ticket, reference in rows
     ]
@@ -57,34 +121,100 @@ def answer_help(
     action = payload.action
     if action == "confirm_case":
         return _confirm_case(payload, principal, db, conversation_id, context, user_id)
-    if action == "list_cases" or any(
+    if any(
+        phrase in lowered
+        for phrase in ("cancel it", "cancel this", "cancel the case", "never mind")
+    ):
+        if context.get("case_offer") or context.get("case_awaiting_issue"):
+            _clear_case_draft(context)
+            return _reply(
+                "I’ve cancelled the draft. You can start a new case whenever you’re ready."
+            )
+
+    case_id_match = _CASE_DETAILS.search(payload.message)
+    wants_details = any(
         phrase in lowered
         for phrase in (
-            "any update on my ticket",
-            "any update on my case",
-            "ticket status",
-            "ticket update",
-            "my cases",
-            "my tickets",
+            "case is for",
+            "case for",
+            "case about",
+            "case is about",
+            "ticket for",
+            "ticket about",
+        )
+    ) and not _CASE_REQUEST.search(lowered)
+    if (
+        action == "list_cases"
+        or case_id_match
+        or wants_details
+        or any(
+            phrase in lowered
+            for phrase in (
+                "update on my ticket",
+                "update on my case",
+                "ticket status",
+                "ticket update",
+                "case status",
+                "my cases",
+                "my tickets",
+                "any tickets",
+                "any cases",
+            )
         )
     ):
         cases = _case_list(db, user_id)
+        if case_id_match or wants_details:
+            target = (
+                case_id_match.group().upper() if case_id_match else context.get("case_ticket_id")
+            )
+            matches = [case for case in cases if case["ticket_id"] == target]
+            if not target and len(cases) == 1:
+                matches = cases
+            if matches:
+                case = matches[0]
+                summary = case["summary"] or "No issue details were recorded."
+                return _reply(
+                    f"Case {case['ticket_id']} is {case['status']}. {summary}",
+                    cases=matches,
+                    tools_used=["list_owned_cases"],
+                )
+            if target or not cases:
+                return _reply(
+                    "I couldn’t find that case under your account.", tools_used=["list_owned_cases"]
+                )
+            return _reply(
+                "Which case would you like me to explain?",
+                cases=cases,
+                tools_used=["list_owned_cases"],
+            )
         answer = (
             "Here are your support cases."
             if cases
             else "I couldn’t find any support cases for your account."
         )
+        return _reply(answer, cases=cases, tools_used=["list_owned_cases"])
+
+    if "statement" in lowered:
+        answer = "You can download your statement from Overview → Download statement CSV."
+        if any(
+            period in lowered for period in ("last month", "date range", "this month", "last year")
+        ):
+            answer += " The CSV includes all transactions for the selected account."
+        return _reply(answer, next_action="download_statement")
+
+    if re.match(r"^(?:can you |please )?(?:transfer|send)\s+(?:₹|rs\.?|money|\d)", lowered):
         return _reply(
-            answer,
-            cases=cases,
-            tools_used=["list_owned_cases"],
+            "Use the Transfer page to review the recipient and amount before sending.",
+            next_action="open_transfer",
         )
 
+    case_request = _CASE_REQUEST.search(payload.message)
     message_match = _TRANSACTION_REFERENCE.search(payload.message)
     message_ref = message_match.group(0) if message_match else None
     typed_ref = message_ref or (
         payload.transaction_reference if action == "select_transaction" else None
     )
+    failed_list = bool(_FAILED_LIST.search(lowered))
     vague_withdrawal = any(
         term in lowered
         for term in ("last withdrawal declined", "withdrawal declined", "withdrawal failed")
@@ -115,22 +245,45 @@ def answer_help(
     selected_context = context.get("selected_transaction")
     contextual_transaction_followup = bool(
         selected_context
-        and any(
-            term in lowered
-            for term in (
-                "why did that one fail",
-                "why did it fail",
-                "why was it declined",
-                "money back",
-                "refund",
-                "debited",
-                "deducted",
-                "reversed",
+        and (
+            vague_recipient
+            or any(
+                term in lowered
+                for term in (
+                    "why did that one fail",
+                    "why did it fail",
+                    "why was it declined",
+                    "money back",
+                    "refund",
+                    "debited",
+                    "deducted",
+                    "reversed",
+                )
             )
         )
     )
     if contextual_transaction_followup and selected_context and not typed_ref:
         typed_ref = selected_context.get("reference")
+    if (
+        context.get("case_awaiting_issue")
+        and action is None
+        and not case_request
+        and not message_ref
+        and not any(
+            term in lowered
+            for term in (
+                "my balance",
+                "my account balance",
+                "my kyc",
+                "my transactions",
+                "what can you do",
+                "what all can you do",
+                "how much money do i have",
+            )
+        )
+    ):
+        return _prepare_case(context, payload.message)
+
     if action == "select_transaction" or message_ref or contextual_transaction_followup:
         if not typed_ref:
             return _reply(
@@ -154,19 +307,28 @@ def answer_help(
         context.update(selected_transaction=card)
         offered = context.get("case_offer_transaction")
         if offered and offered["reference"] != card["reference"]:
-            context.pop("case_offer", None)
-            context.pop("case_offer_transaction", None)
+            _clear_case_draft(context)
         if context.get("case_ticket_ref") != card["reference"]:
             context.pop("case_ticket_id", None)
             context.pop("case_ticket_ref", None)
+        if case_request:
+            return _prepare_case(context, _issue_from_request(payload.message, case_request))
         answer = _explain_transaction(card, from_corebank=transaction.get("source") == "corebank")
+        if vague_recipient and card["status"] == "posted":
+            answer = (
+                f"CoreBank shows transfer {card['reference']} as posted. "
+                "If the recipient still cannot locate it, open a support case so we can review it."
+            )
         return _reply(
             answer,
             selected_transaction=card,
             tools_used=["get_transaction_status"],
         )
 
-    if vague_withdrawal or vague_recipient or vague_transaction:
+    if case_request:
+        return _prepare_case(context, _issue_from_request(payload.message, case_request))
+
+    if failed_list or vague_withdrawal or vague_recipient or vague_transaction:
         result = list_user_transactions(user_id, limit=50)
         if result.get("error"):
             return _reply(
@@ -176,8 +338,13 @@ def answer_help(
         candidates = result.get("transactions", [])
         if vague_withdrawal:
             candidates = [
-                t for t in candidates if "withdraw" in str(t.get("transaction_type", "")).casefold()
+                t
+                for t in candidates
+                if "withdraw" in t.get("transaction_type", "").casefold()
+                and t.get("status") == "failed"
             ]
+        elif failed_list:
+            candidates = [t for t in candidates if t.get("status") == "failed"]
         elif vague_recipient:
             candidates = [
                 t
@@ -186,52 +353,32 @@ def answer_help(
                     x in str(t.get("transaction_type", "")).casefold()
                     for x in ("transfer", "payment")
                 )
+                and t.get("transaction_type") != "transfer_received"
             ]
         elif vague_transaction:
             candidates = [
                 t for t in candidates if str(t.get("status", "")).casefold() == "failed"
             ] or candidates
         options = [_transaction_card(t) for t in candidates[:5]]
-        answer = (
-            "Which transaction do you mean? Choose one below."
-            if options
-            else "I couldn’t find a recent match. Choose a transaction from Activity "
-            "or share its reference."
-        )
+        if failed_list or vague_withdrawal:
+            answer = (
+                "Here are your recent failed transactions. Select one to see what happened."
+                if options
+                else "You have no recent failed transactions."
+            )
+        else:
+            answer = (
+                "Which transaction do you mean? Choose one below."
+                if options
+                else "I couldn’t find a recent match. Choose a transaction from Activity "
+                "or share its reference."
+            )
         return _reply(
             answer,
             transaction_options=options,
             tools_used=["list_user_transactions"],
         )
 
-    # Integrated case requests are always staged for an explicit confirmation.
-    if any(
-        term in lowered
-        for term in (
-            "open a case",
-            "open a ticket",
-            "raise a ticket",
-            "raise a case",
-            "create a ticket",
-            "create a case",
-            "support case",
-            "talk to support",
-            "escalate this",
-            "file a complaint",
-            "raise a complaint",
-            "dispute this",
-        )
-    ):
-        selected = context.get("selected_transaction")
-        context["case_description"] = payload.message
-        context["case_offer"] = True
-        context["case_offer_transaction"] = selected
-        answer = (
-            "I can open a support case"
-            + (f" for {selected['reference']}" if selected else "")
-            + ". Confirm to create it."
-        )
-        return _reply(answer, case_offer=True)
     return None
 
 
@@ -257,13 +404,13 @@ def _confirm_case(
                 f"Case {ticket.ticket_id} is {ticket.status}.",
                 ticket_id=ticket.ticket_id,
             )
-    if not context.get("case_offer") or requested_ref != offered_ref:
+    desc = context.get("case_description", "")
+    if not context.get("case_offer") or requested_ref != offered_ref or not _meaningful_issue(desc):
         return _reply(
             "I don’t have a matching case ready to confirm. Tell me what happened first.",
         )
 
     issue_type = "failed_transaction" if offered else "general_support"
-    desc = summarize_customer_issue(context.get("case_description") or payload.message)
     stable_key = offered_ref or conversation_id
     ticket_id = "TCK-" + hashlib.sha256(f"{user_id}:{stable_key}".encode()).hexdigest()[:24].upper()
     dialect = db.get_bind().dialect.name
@@ -360,6 +507,8 @@ def _reply(
     case_offer: bool = False,
     ticket_id: str | None = None,
     tools_used: list[str] | None = None,
+    case_summary: str | None = None,
+    next_action: str | None = None,
 ) -> dict:
     return {
         "response": answer,
@@ -371,4 +520,6 @@ def _reply(
         "transaction_options": transaction_options or [],
         "case_offer": case_offer,
         "cases": cases or [],
+        "case_summary": case_summary,
+        "next_action": next_action,
     }

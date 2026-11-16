@@ -84,6 +84,7 @@ class RuleRouter:
         }
         capability_phrases = (
             "what can you do",
+            "what all can you do",
             "how can you help",
             "what do you do",
             "who are you",
@@ -128,6 +129,7 @@ class RuleRouter:
         risk_words = ("risk", "fraud", "fraudulent", "suspicious", "safe transaction")
         account_summary_phrases = (
             "account balance",
+            "how much money do i have",
             "my balance",
             "available balance",
             "account summary",

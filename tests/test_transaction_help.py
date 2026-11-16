@@ -6,8 +6,8 @@ import pytest
 
 from backend import help_workflow, main
 
-FAILED = "FAILHELPCHECK001"
-POSTED = "TXNHELPCHECK002"
+FAILED = "FAILABCDEF1234567890"
+POSTED = "TXN1234567890ABCDEFS"
 
 
 @pytest.fixture
@@ -96,8 +96,11 @@ def test_support_cases_require_confirmation_and_are_customer_scoped(portal_chat)
     owned = portal_chat(f"Check {FAILED}")
     context = {"conversation_id": owned["conversation_id"]}
     offered = portal_chat("Open a support case", **context)
-    assert offered["case_offer"]
+    assert not offered["case_offer"]
     assert offered["ticket_id"] is None
+    offered = portal_chat("The ATM declined my withdrawal", **context)
+    assert offered["case_offer"]
+    assert offered["case_summary"] == "The ATM declined my withdrawal"
     first = portal_chat("Confirm", action="confirm_case", transaction_reference=FAILED, **context)
     assert first["ticket_id"]
     repeat = portal_chat("Confirm", action="confirm_case", transaction_reference=FAILED, **context)
@@ -113,7 +116,28 @@ def test_support_cases_require_confirmation_and_are_customer_scoped(portal_chat)
 
 def test_changing_the_selected_transaction_invalidates_the_old_offer(portal_chat):
     context = {"conversation_id": portal_chat(f"Check {FAILED}")["conversation_id"]}
-    assert portal_chat("Open a support case", **context)["case_offer"]
+    assert portal_chat("Open a support case about my declined ATM withdrawal", **context)[
+        "case_offer"
+    ]
     portal_chat("Get help", action="select_transaction", transaction_reference=POSTED, **context)
     stale = portal_chat("Confirm", action="confirm_case", transaction_reference=FAILED, **context)
     assert stale["ticket_id"] is None
+
+
+def test_failed_list_and_statement_use_the_correct_route(portal_chat):
+    reply = portal_chat("Can you check my failed transactions?")
+    assert [option["reference"] for option in reply["transaction_options"]] == [FAILED]
+    no_failures = portal_chat("Can you check my failed transactions?", email="neha@example.com")
+    assert "no recent failed transactions" in no_failures["response"]
+    statement = portal_chat("Can I download my bank statement?")
+    assert statement["next_action"] == "download_statement"
+    assert "Download statement CSV" in statement["response"]
+
+
+def test_cancelled_offer_cannot_be_confirmed(portal_chat):
+    proposed = portal_chat("Open a support case about my missing ATM withdrawal")
+    assert proposed["case_offer"]
+    context = {"conversation_id": proposed["conversation_id"]}
+    cancelled = portal_chat("Never mind, cancel it", **context)
+    assert "cancelled" in cancelled["response"]
+    assert portal_chat("Confirm case", action="confirm_case", **context)["ticket_id"] is None

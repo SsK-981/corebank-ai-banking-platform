@@ -101,6 +101,12 @@ class FintechAgent:
                 "tickets, but I cannot provide investment or legal advice."
             )
 
+        if plan.intent == Intent.GENERAL_SUPPORT and not allow_ticket_creation:
+            return self._result(
+                "Could you share a little more about what happened? "
+                "For a payment issue, tell me the amount or choose the transaction in Activity."
+            )
+
         results: dict[str, Any] = {}
         tools_used: list[str] = []
         sources: list[str] = []
@@ -230,11 +236,7 @@ class FintechAgent:
     def _small_talk_response(message: str) -> str:
         lowered = message.lower()
         if any(term in lowered for term in ("thank", "thanks", "okay", "ok", "got it", "gotcha")):
-            return (
-                "Anytime — happy to help. If anything else comes up, send me a "
-                "transaction ID or ask about refunds, KYC, account activity risk, "
-                "wallet issues, or support tickets."
-            )
+            return "Anytime. Let me know if you need anything else."
         if any(term in lowered for term in ("bye", "goodbye")):
             return "Goodbye! If another payment or account issue comes up, I’ll be here to help."
         if any(
@@ -257,6 +259,7 @@ class FintechAgent:
             phrase in lowered
             for phrase in (
                 "what can you do",
+                "what all can you do",
                 "how can you help",
                 "what do you do",
                 "who are you",
@@ -365,7 +368,7 @@ class FintechAgent:
             elif account_summary.get("error"):
                 parts.append(
                     "I couldn’t reach the connected banking system for the account summary. "
-                    "Please make sure the Spring Boot banking app is running."
+                    "Please try again in a moment."
                 )
             else:
                 parts.append(
