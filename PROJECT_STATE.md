@@ -100,3 +100,37 @@ a successful PostgreSQL-backed response and recovered the original receipt
 after reloading, with one ₹400 movement. This run verified correctness rather
 than repeating the large-data throughput benchmark. The ongoing manual H2
 instance was migrated in place using its existing fixture data.
+
+## Help quality audit
+
+Exercised 11 conversations through the live signed-in Help route on a separate
+synthetic Spring Boot/H2 and FastAPI/SQLite instance using the default local
+router. Balance, recent history, and KYC retrieved the expected CoreBank data.
+An explicit request for another demo customer was blocked. Everyday recipient
+and failed-withdrawal wording and a failing-transaction follow-up got generic
+fallbacks. A valid failed reference copied from history was missed. Asking for
+an update after opening a ticket created a second ticket. The refund follow-up
+returned general policy without resolving the referenced withdrawal.
+
+Recommended first milestone: transaction-scoped Help with an Activity entry
+point, backend-validated transaction selection, focused clarification, and
+confirmed case creation plus an owned case-status read. Add regression scenarios
+before comparing optional model routing. No application behavior changed.
+
+## Transaction Help and tracked cases
+
+Activity now opens Help with a server-validated customer transaction selected.
+Help suggests recent matches for vague payment questions, retains the selection
+through follow-ups, and uses CoreBank’s recorded failure reason. The signed-in
+portal requires explicit case confirmation and links each transaction case to
+its originating reference. Retrying confirmation returns the same case.
+**My cases** and ticket-status questions read the authenticated customer's
+existing cases. The standalone chat preserves its previous ticket behavior.
+
+Verified 67 Python tests at 82% coverage, 23 Java tests, and two live Help
+tests with the PostgreSQL 17.11 support database. The live tests check
+concurrent confirmation and cross-customer access. Chrome at 390 px
+completed Activity → failed withdrawal explanation → case confirmation →
+case lookup after reload. PostgreSQL exposed foreign-key write ordering in
+demo startup and conversation creation. Both were fixed and retested.
+The persistent manual demo was restarted with the existing accounts and data.

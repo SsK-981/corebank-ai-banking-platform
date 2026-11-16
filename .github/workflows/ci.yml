@@ -114,20 +114,4 @@ jobs:
             exit 1
           fi
 
-          python - <<'PY'
-          import requests
-
-          url = "http://127.0.0.1:8080/customer/support/chat"
-          prompt = {"message": "What is my KYC status?"}
-          unauthorized = requests.post(url, json=prompt, timeout=10)
-          assert unauthorized.status_code in {401, 403}, unauthorized.status_code
-
-          response = requests.post(
-              url, auth=("amit@example.com", "password123"), json=prompt, timeout=30
-          )
-          response.raise_for_status()
-          payload = response.json()
-          assert "check_kyc_status" in payload["tools_used"], payload
-          assert "pending" in payload["response"].lower(), payload
-          assert payload["conversation_id"], payload
-          PY
+          RUN_LIVE_PORTAL_HELP_TESTS=1 python -m pytest tests/integration/test_live_portal_help.py -q

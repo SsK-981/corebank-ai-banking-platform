@@ -1,6 +1,7 @@
 """FastAPI application for the Fintech AI Agent Chatbot."""
 
 import hmac
+import json
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, Header, HTTPException, status
@@ -12,6 +13,7 @@ from backend.agent_runtime import FintechAgent
 from backend.config import get_settings
 from backend.conversations import add_audit_log, add_message, get_or_create_conversation
 from backend.database import get_db, init_db
+from backend.help_workflow import answer_help
 from backend.middleware import RequestContextMiddleware
 from backend.models import AuditLog, ChatMessage, Ticket, Transaction, User
 from backend.schemas import (
@@ -35,7 +37,10 @@ from backend.security import (
     require_roles,
 )
 from backend.seed_data import seed_database
-from backend.tools import calculate_risk_score, create_support_ticket
+from backend.tools import (
+    calculate_risk_score,
+    create_support_ticket,
+)
 
 settings = get_settings()
 
@@ -115,6 +120,12 @@ def chat(
     principal: CurrentPrincipal,
     db: Session = Depends(get_db),
 ) -> dict:
+    return _chat_impl(payload, principal, db, integrated=False)
+
+
+def _chat_impl(
+    payload: ChatRequest, principal: Principal, db: Session, *, integrated: bool
+) -> dict:
     conversation = get_or_create_conversation(db, principal.subject, payload.conversation_id)
     rows = list(
         db.scalars(
@@ -125,8 +136,27 @@ def chat(
         ).all()
     )
     history = [{"role": item.role, "content": item.content} for item in reversed(rows)]
+    persisted_help_context = {}
+    latest_assistant = next((row for row in rows if row.role == "assistant"), None)
+    if latest_assistant:
+        try:
+            persisted_help_context = json.loads(latest_assistant.metadata_json or "{}").get(
+                "help_context", {}
+            )
+        except (TypeError, ValueError):
+            persisted_help_context = {}
     try:
-        result = agent.process_message(payload.message, principal, history)
+        result = None
+        if integrated and principal.user_id:
+            result = answer_help(
+                payload, principal, db, conversation.conversation_id, persisted_help_context
+            )
+        if result is None:
+            result = agent.process_message(
+                payload.message, principal, history, allow_ticket_creation=not integrated
+            )
+        # The conversation must exist before inserting its messages on PostgreSQL.
+        db.flush()
         add_message(db, conversation.conversation_id, "user", payload.message)
         add_message(
             db,
@@ -137,6 +167,7 @@ def chat(
                 "tools_used": result["tools_used"],
                 "ticket_id": result.get("ticket_id"),
                 "sources": result.get("sources", []),
+                "help_context": persisted_help_context,
             },
         )
         add_audit_log(
@@ -198,7 +229,7 @@ def internal_support_chat(
         user_id=user_id,
         roles=frozenset({"customer"}),
     )
-    return chat(payload, principal, db)
+    return _chat_impl(payload, principal, db, integrated=True)
 
 
 @app.get("/transactions/{transaction_id}", response_model=TransactionResponse)

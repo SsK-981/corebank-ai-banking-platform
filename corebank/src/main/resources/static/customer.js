@@ -10,6 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let accounts = [];
   let currentAccount = null;
   let conversationId = null;
+  let selectedHelpTransaction = null;
+  let helpCaseOffer = false;
+  let supportInFlight = false;
   let pendingTransfer = null;
   let unresolvedTransfer = null;
   let inFlightTransfer = null;
@@ -156,6 +159,9 @@ document.addEventListener('DOMContentLoaded', () => {
     currentAccount = null;
     accounts = [];
     conversationId = null;
+    selectedHelpTransaction = null;
+    helpCaseOffer = false;
+    supportInFlight = false;
     pendingTransfer = null;
     unresolvedTransfer = null;
     inFlightTransfer = null;
@@ -182,6 +188,15 @@ document.addEventListener('DOMContentLoaded', () => {
     ])
       hideMessage(id);
     $('chat-messages').replaceChildren();
+    $('help-transaction-context').replaceChildren();
+    $('help-transaction-context').classList.add('hidden');
+    $('help-transaction-options').replaceChildren();
+    $('help-transaction-options').classList.add('hidden');
+    $('help-cases').replaceChildren();
+    $('help-cases').classList.add('hidden');
+    $('help-case-offer').classList.add('hidden');
+    $('request-help-case').classList.add('hidden');
+    setSupportBusy(false);
     addBubble(
       'assistant',
       'Hi! I’m here to help with your CoreBank account. What can I help you with?',
@@ -341,6 +356,23 @@ document.addEventListener('DOMContentLoaded', () => {
         new Date(t.timestamp).toLocaleString(),
         'activity-date',
       );
+    if (activity) {
+      const help = appendText(row, 'button', 'Get help', 'activity-help');
+      help.type = 'button';
+      help.setAttribute(
+        'aria-label',
+        `Get help with ${t.referenceNumber || 'this transaction'}`,
+      );
+      help.addEventListener('click', () => {
+        if (!t.referenceNumber || supportInFlight) return;
+        navigate('help');
+        sendSupport(
+          'Get help with this transaction',
+          'select_transaction',
+          t.referenceNumber,
+        );
+      });
+    }
     container.append(row);
   }
   async function loadTransactions() {
@@ -430,6 +462,179 @@ document.addEventListener('DOMContentLoaded', () => {
     $('chat-error').textContent = error.message;
     $('chat-error').classList.remove('hidden');
   }
+
+  function showHelpTransaction(transaction) {
+    selectedHelpTransaction = transaction?.reference || null;
+    $('request-help-case').classList.toggle('hidden', !selectedHelpTransaction);
+    const panel = $('help-transaction-context');
+    panel.replaceChildren();
+    if (!transaction) {
+      panel.classList.add('hidden');
+      return;
+    }
+    appendText(panel, 'strong', 'Selected transaction');
+    const detail = helpTransactionDetails(transaction);
+    appendText(panel, 'span', detail);
+    panel.classList.remove('hidden');
+  }
+  function helpLabel(value) {
+    if (value === 'withdraw') return 'Withdrawal';
+    const text = value.replaceAll('_', ' ');
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }
+
+  function helpTransactionDetails(transaction) {
+    const timestamp = transaction.timestamp
+      ? new Date(transaction.timestamp)
+      : null;
+    return [
+      transaction.reference,
+      transaction.type ? helpLabel(transaction.type) : '',
+      transaction.amount != null
+        ? money.format(Number(transaction.amount))
+        : '',
+      transaction.status ? helpLabel(transaction.status) : '',
+      timestamp && !Number.isNaN(timestamp.getTime())
+        ? timestamp.toLocaleDateString('en-IN')
+        : '',
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  function renderHelpOptions(options = []) {
+    const panel = $('help-transaction-options');
+    panel.replaceChildren();
+    if (!options.length) {
+      panel.classList.add('hidden');
+      return;
+    }
+    appendText(panel, 'strong', 'Choose the transaction you mean');
+    options.forEach((transaction) => {
+      const button = appendText(
+        panel,
+        'button',
+        helpTransactionDetails(transaction),
+        'help-option',
+      );
+      button.type = 'button';
+      button.addEventListener('click', () =>
+        sendSupport(
+          'Please help me with this transaction.',
+          'select_transaction',
+          transaction.reference,
+        ),
+      );
+    });
+    panel.classList.remove('hidden');
+  }
+  function renderHelpCases(cases = []) {
+    const panel = $('help-cases');
+    panel.replaceChildren();
+    appendText(panel, 'strong', 'My support cases');
+    if (!cases.length)
+      appendText(panel, 'p', 'No support cases yet.', 'empty-state');
+    cases.forEach((item) => {
+      const card = appendText(panel, 'article', '', 'help-case-card');
+      appendText(card, 'strong', item.ticket_id || 'Support case');
+      appendText(
+        card,
+        'span',
+        `${helpLabel(item.status || 'Status unavailable')} · ${helpLabel(item.issue_type || 'Support request')}${item.transaction_reference ? ` · ${item.transaction_reference}` : ''}`,
+      );
+    });
+    panel.classList.remove('hidden');
+  }
+  function setSupportBusy(busy) {
+    supportInFlight = busy;
+    document
+      .querySelectorAll(
+        '#chat-form input, #chat-form button, [data-help-message], [data-help-action], ' +
+          '#request-help-case, .help-option, .activity-help',
+      )
+      .forEach((control) => {
+        control.disabled = busy;
+      });
+  }
+
+  async function sendSupport(text, action, transactionReference) {
+    if (!text || !session?.user || supportInFlight) return;
+    const activeSession = session;
+    const previousOffer = helpCaseOffer;
+    setSupportBusy(true);
+    $('help-case-offer').classList.add('hidden');
+    $('chat-error').classList.add('hidden');
+    addBubble('user', text);
+    const waiting = addBubble('assistant', 'One moment…');
+    try {
+      const body = { message: text, conversation_id: conversationId };
+      if (action) body.action = action;
+      if (transactionReference)
+        body.transaction_reference = transactionReference;
+      const result = await request('/customer/support/chat', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+      if (session !== activeSession) return;
+      conversationId = result.conversation_id;
+      waiting.remove();
+      addBubble('assistant', result.response);
+      if (result.selected_transaction || action === 'select_transaction') {
+        showHelpTransaction(result.selected_transaction);
+      }
+      renderHelpOptions(result.transaction_options || []);
+      if (action === 'list_cases' || result.cases?.length)
+        renderHelpCases(result.cases || []);
+      else $('help-cases').classList.add('hidden');
+      helpCaseOffer = Boolean(result.case_offer);
+      $('help-case-offer').classList.toggle('hidden', !helpCaseOffer);
+      const tools = (result.tools_used || []).join(', ');
+      if (tools) {
+        const detail = document.createElement('details');
+        appendText(detail, 'summary', 'Agent activity');
+        appendText(detail, 'p', tools);
+        $('chat-messages').append(detail);
+      }
+    } catch (error) {
+      waiting.remove();
+      if (session === activeSession) {
+        $('help-case-offer').classList.toggle('hidden', !previousOffer);
+        supportError(error);
+      }
+    } finally {
+      if (session === activeSession) {
+        setSupportBusy(false);
+      }
+    }
+  }
+
+  document.querySelectorAll('[data-help-message]').forEach((button) =>
+    button.addEventListener('click', () => {
+      navigate('help');
+      sendSupport(button.dataset.helpMessage);
+    }),
+  );
+  document
+    .querySelectorAll('[data-help-action="list_cases"]')
+    .forEach((button) =>
+      button.addEventListener('click', () =>
+        sendSupport('Show my support cases.', 'list_cases'),
+      ),
+    );
+  $('request-help-case').addEventListener('click', () =>
+    sendSupport('Open a support case'),
+  );
+  $('confirm-help-case').addEventListener('click', () => {
+    if (!helpCaseOffer || supportInFlight) return;
+    $('confirm-help-case').disabled = true;
+    sendSupport(
+      'Please open the support case.',
+      'confirm_case',
+      selectedHelpTransaction,
+    ).finally(() => {
+      $('confirm-help-case').disabled = false;
+    });
+  });
 
   $('login-tab').addEventListener('click', () => showAuthTab('login'));
   $('register-tab').addEventListener('click', () => showAuthTab('register'));
@@ -837,41 +1042,8 @@ document.addEventListener('DOMContentLoaded', () => {
   $('chat-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = $('chat-input').value.trim();
-    const send = $('chat-form').querySelector('button');
-    if (!text || send.disabled) return;
-    const activeSession = session;
-    send.disabled = true;
     $('chat-input').value = '';
-    $('chat-error').classList.add('hidden');
-    addBubble('user', text);
-    const waiting = addBubble('assistant', 'One moment…');
-    try {
-      const result = await request('/customer/support/chat', {
-        method: 'POST',
-        body: JSON.stringify({
-          message: text,
-          conversation_id: conversationId,
-        }),
-      });
-      if (session !== activeSession) return;
-      conversationId = result.conversation_id;
-      waiting.remove();
-      addBubble('assistant', result.response);
-      if (result.ticket_id)
-        addBubble('assistant', `Support ticket ${result.ticket_id}`);
-      const tools = (result.tools_used || []).join(', ');
-      if (tools) {
-        const detail = document.createElement('details');
-        appendText(detail, 'summary', 'Agent activity');
-        appendText(detail, 'p', tools);
-        $('chat-messages').append(detail);
-      }
-    } catch (error) {
-      waiting.remove();
-      if (session === activeSession) supportError(error);
-    } finally {
-      send.disabled = false;
-    }
+    await sendSupport(text);
   });
 
   renderSession();

@@ -1,4 +1,4 @@
-"""Idempotently seed the SQLite database from the sample CSV files."""
+"""Idempotently seed the demo database from the sample CSV files."""
 
 from pathlib import Path
 
@@ -20,6 +20,7 @@ def seed_database() -> None:
         if db.scalar(select(User.id).limit(1)) is None:
             users = pd.read_csv(DATA_DIR / "sample_users.csv").to_dict("records")
             db.add_all([User(**row) for row in users])
+            db.flush()
 
         if db.scalar(select(Transaction.id).limit(1)) is None:
             transactions = pd.read_csv(DATA_DIR / "sample_transactions.csv").to_dict("records")

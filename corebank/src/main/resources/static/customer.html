@@ -385,6 +385,48 @@
                 </p>
               </div>
             </div>
+            <div class="help-tools">
+              <div
+                id="help-transaction-context"
+                class="help-context hidden"
+                aria-live="polite"
+              ></div>
+              <div
+                id="help-transaction-options"
+                class="help-options hidden"
+              ></div>
+              <div class="help-actions" aria-label="Help shortcuts">
+                <button
+                  type="button"
+                  class="quiet-button"
+                  data-help-message="Explain a transaction"
+                >
+                  Explain a transaction
+                </button>
+                <button
+                  type="button"
+                  class="quiet-button"
+                  data-help-message="I need help with a failed transaction"
+                >
+                  Failed transaction
+                </button>
+                <button
+                  id="request-help-case"
+                  type="button"
+                  class="quiet-button hidden"
+                >
+                  Open a support case
+                </button>
+                <button
+                  type="button"
+                  class="quiet-button"
+                  data-help-action="list_cases"
+                >
+                  My cases
+                </button>
+              </div>
+              <div id="help-cases" class="help-cases hidden"></div>
+            </div>
             <div class="surface-card support-card">
               <div class="support-header">
                 <span class="support-avatar">C</span>
@@ -405,6 +447,12 @@
                 </div>
               </div>
               <p id="chat-error" class="inline-error hidden" role="alert"></p>
+              <div id="help-case-offer" class="case-offer hidden">
+                <span>Support can open a case for this issue.</span>
+                <button id="confirm-help-case" class="primary" type="button">
+                  Confirm open support case
+                </button>
+              </div>
               <form id="chat-form" class="chat-form">
                 <label class="sr-only" for="chat-input"
                   >Message CoreBank support</label

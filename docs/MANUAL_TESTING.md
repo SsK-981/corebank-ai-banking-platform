@@ -24,7 +24,9 @@ U002, or U003 identity. Each ID resolves to the same CoreBank customer.
    ₹500. Check the outgoing entry in Activity.
 3. Sign in as Rahul and check that ₹500 appears as an incoming transfer.
 4. As Amit, ask Help “What is my KYC status?” and confirm it says pending
-   on a fresh database. Ask “Open a support ticket for my failed withdrawal.”
+   on a fresh database. In Activity, choose **Get help** on the failed withdrawal,
+   ask why it failed, then open and confirm a support case. Use **My cases** to
+   check the same case later.
 
 Names, sign-ins, and customer IDs are fixed across fresh seeds. Account
 numbers and transaction references are generated for each database. Use the

@@ -74,6 +74,8 @@ class FintechAgent:
         message: str,
         principal: Principal,
         history: list[dict] | None = None,
+        *,
+        allow_ticket_creation: bool = True,
     ) -> dict[str, Any]:
         history = history or []
         cleaned_message = message.strip()
@@ -166,7 +168,7 @@ class FintechAgent:
                 sources.append(results["faq"]["source"])
 
         ticket_id: str | None = None
-        if plan.intent == Intent.COMPLAINT:
+        if plan.intent == Intent.COMPLAINT and allow_ticket_creation:
             user_id = user_id or principal.user_id
             if user_id:
                 risk_level = results.get("risk", {}).get("risk_level")
@@ -179,6 +181,11 @@ class FintechAgent:
                 )
                 tools_used.extend(["summarize_customer_issue", "create_support_ticket"])
                 ticket_id = results["ticket"].get("ticket_id")
+        elif plan.intent == Intent.COMPLAINT:
+            return self._result(
+                "Choose a transaction from Activity or ask me to open a support case. "
+                "I’ll ask you to confirm before creating it."
+            )
 
         response = self._compose(plan, results, transaction_id, user_id)
         response = self._polish_response(

@@ -9,10 +9,11 @@ Run `docker compose up --build` from the repository and open
    Make a small demo transfer and note the reference in the confirmation.
 3. **Activity.** Find the new transfer and the seeded failed withdrawal. Download a
    CSV statement if needed.
-4. **Help.** Ask “Show my transactions” or “What is my KYC status?” from the same
-   portal. Expand agent activity to see the tool used.
-5. **Escalation.** Ask “Open a support ticket for my failed withdrawal.” Show the ticket
-   ID. The standalone [operations dashboard](http://localhost:8501) can inspect tickets.
+4. **Help.** In Activity, select **Get help** on Amit’s failed withdrawal. Ask “Why
+   did that one fail?” The assistant uses the selected record to explain the decline.
+5. **Escalation.** Select **Open a support case** and confirm. Show the case ID. Use
+   **My cases** to find the same case and its status. The standalone
+   [operations dashboard](http://localhost:8501) can inspect tickets.
 
 ## Suggested interview questions
 

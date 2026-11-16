@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.database import Base
@@ -51,6 +51,20 @@ class Ticket(Base):
     priority: Mapped[str] = mapped_column(String(20), default="medium")
     status: Mapped[str] = mapped_column(String(30), default="open", index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class SupportCaseTransaction(Base):
+    """Link a support case to its selected banking reference."""
+
+    __tablename__ = "support_case_transactions"
+    __table_args__ = (
+        UniqueConstraint("transaction_reference", name="uq_support_case_transaction_reference"),
+    )
+
+    ticket_id: Mapped[str] = mapped_column(
+        ForeignKey("tickets.ticket_id", ondelete="CASCADE"), primary_key=True
+    )
+    transaction_reference: Mapped[str] = mapped_column(String(64))
 
 
 class FAQ(Base):

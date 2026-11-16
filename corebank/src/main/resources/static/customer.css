@@ -827,7 +827,7 @@ button:focus-visible {
   font-size: 11px;
 }
 .activity-row {
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto;
 }
 .activity-card .activity-row:first-child {
   border-top: 0;
@@ -837,6 +837,97 @@ button:focus-visible {
   color: var(--muted);
   min-width: 120px;
   text-align: right;
+}
+.activity-help {
+  border: 1px solid #cbdcd3;
+  border-radius: 8px;
+  background: #fff;
+  color: var(--green);
+  padding: 7px 9px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.help-tools {
+  max-width: 650px;
+  margin: 0 0 14px;
+  display: grid;
+  gap: 10px;
+}
+.help-context,
+.help-options,
+.help-cases,
+.case-offer {
+  border: 1px solid #cbdcd3;
+  border-radius: 12px;
+  background: #f3f8f5;
+  padding: 13px 15px;
+  color: var(--ink);
+}
+.help-context strong,
+.help-context span,
+.help-options > strong,
+.help-case-card strong,
+.help-case-card span {
+  display: block;
+}
+.help-context strong,
+.help-options > strong,
+.help-cases > strong {
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+.help-context span,
+.help-case-card span {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.help-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.help-actions .quiet-button {
+  font-size: 11px;
+}
+.help-options {
+  display: grid;
+  gap: 8px;
+}
+.help-option {
+  text-align: left;
+  border: 1px solid var(--line);
+  background: white;
+  padding: 10px;
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+}
+.help-cases {
+  display: grid;
+  gap: 9px;
+}
+.help-case-card {
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 10px;
+}
+.help-case-card strong {
+  font-size: 11px;
+  margin-bottom: 3px;
+}
+.case-offer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 17px 8px;
+  font-size: 11px;
+}
+.case-offer .primary {
+  white-space: nowrap;
 }
 .support-card {
   max-width: 650px;
@@ -1120,6 +1211,14 @@ button:focus-visible {
     text-align: left;
     min-width: 0;
     padding-left: 45px;
+  }
+  .activity-row .activity-help {
+    grid-column: 2 / -1;
+    justify-self: start;
+  }
+  .case-offer {
+    align-items: flex-start;
+    flex-direction: column;
   }
   .filter-label {
     align-items: flex-start;

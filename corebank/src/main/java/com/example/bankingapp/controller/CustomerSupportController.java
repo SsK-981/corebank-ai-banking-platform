@@ -71,5 +71,11 @@ public class CustomerSupportController {
         }
     }
 
-    public record ChatPayload(String message, String conversation_id) {}
+    public record ChatPayload(
+            String message,
+            String conversation_id,
+            String action,
+            String transaction_reference
+    ) {}
+
 }

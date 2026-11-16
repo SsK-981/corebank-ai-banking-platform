@@ -55,3 +55,11 @@ name, and the portal refreshes the latest balance after receiving the receipt.
 The portal keeps one unresolved transfer per customer in the current tab.
 If a response is lost, **Retry transfer** resends its original request. The
 same retry is safe if the first request already committed.
+
+## Transaction Help
+
+Activity can pass a transaction reference to the signed-in support bridge.
+FastAPI looks up the customer’s record and remembers the verified reference
+within that conversation. A case requires explicit confirmation and links to
+the selected reference. The support database stores the case and its link
+together. Asking for an update reads the customer’s existing cases.

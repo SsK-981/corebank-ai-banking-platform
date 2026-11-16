@@ -21,9 +21,9 @@ docker compose up --build
 1. Open [CoreBank](http://localhost:8080) and select **Try demo account**.
    The default local demo uses `amit@example.com` / `password123`.
 2. Open **Activity** to see the seeded withdrawal and transfer history.
-3. Open **Help** and ask “Show my transactions” or “What is my KYC status?”
-   Help uses the same signed-in demo customer. New registrations can use the banking
-   portal. Integrated Help currently supports the three seeded customers.
+3. From **Activity**, choose **Get help** on the failed withdrawal and ask why it
+   failed. You can open and confirm a support case, then find it in **My cases**.
+   Integrated Help uses the signed-in identity for the three seeded customers.
 4. For a transfer demo, use Rahul’s account number from
    `docker compose logs corebank-seed`.
 
