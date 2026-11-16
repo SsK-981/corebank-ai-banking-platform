@@ -609,7 +609,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (to === from.accountNumber)
       return message(
         'transfer-result',
-        "You can't transfer money to the same account.",
+        'The recipient account must be different from the source account.',
         false,
       );
     if (!Number.isFinite(amount) || amount <= 0)
