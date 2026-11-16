@@ -247,21 +247,12 @@ class FintechAgent:
                 "how's it going",
             )
         ):
-            return (
-                "I’m doing well — ready to help with your fintech support questions. "
-                "You can ask me to show your transactions, check a refund, review KYC, "
-                "explain account activity risk, or create a support ticket."
-            )
-        if any(term in lowered for term in ("good morning", "good afternoon", "good evening")):
-            return (
-                "Hello! Hope your day’s going well. I can help with transactions, refunds, "
-                "KYC status, account activity risk, wallet issues, policies, or support tickets."
-            )
+            return "I’m doing well, thank you. How can I help you today?"
+        for greeting in ("Good morning", "Good afternoon", "Good evening"):
+            if greeting.lower() in lowered:
+                return f"{greeting}. How can I help you today?"
         if "are you there" in lowered:
-            return (
-                "Yes, I’m here. Tell me the transaction, refund, KYC, wallet, activity-risk, "
-                "or support issue you want help with."
-            )
+            return "Yes, I’m here. How can I help?"
         if any(
             phrase in lowered
             for phrase in (
@@ -273,16 +264,10 @@ class FintechAgent:
             )
         ):
             return (
-                "I’m your fintech support assistant. I can check transaction status, "
-                "explain failed-payment refunds, review KYC status, summarize activity-risk "
-                "signals, answer approved policy questions, and create support tickets. "
-                "Try: “Check TXN1001” or “Review account activity risk.”"
+                "I can help you find a transaction, check your KYC status, "
+                "or get support with an account issue."
             )
-        return (
-            "Hey! I can help with your fintech support stuff — transactions, refunds, "
-            "KYC, account activity risk, wallet issues, policy timelines, or support tickets. "
-            "You can try something like “Show my transactions” or “Check TXN1002 refund.”"
-        )
+        return "Hello! How can I help you today?"
 
     @staticmethod
     def _format_money(amount: Any) -> str:

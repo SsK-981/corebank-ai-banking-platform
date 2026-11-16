@@ -185,8 +185,7 @@ def test_greeting_gets_natural_support_intro(client, u001_headers):
     assert response.status_code == 200
     body = response.json()
     assert body["tools_used"] == []
-    assert "fintech support" in body["response"]
-    assert "Show my transactions" in body["response"]
+    assert body["response"] == "Hello! How can I help you today?"
 
 
 def test_social_small_talk_gets_natural_response(client, u001_headers):
@@ -198,8 +197,7 @@ def test_social_small_talk_gets_natural_response(client, u001_headers):
     assert response.status_code == 200
     body = response.json()
     assert body["tools_used"] == []
-    assert "doing well" in body["response"]
-    assert "transactions" in body["response"]
+    assert body["response"] == "I’m doing well, thank you. How can I help you today?"
 
 
 def test_thanks_gets_natural_closing_response(client, u001_headers):

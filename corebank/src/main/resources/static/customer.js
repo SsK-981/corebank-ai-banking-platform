@@ -199,7 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     setSupportBusy(false);
     addBubble(
       'assistant',
-      'Hi! I’m here to help with your CoreBank account. What can I help you with?',
+      'Hello! How can I help you today?',
     );
     $('chat-input').value = '';
     $('chat-error').classList.add('hidden');
