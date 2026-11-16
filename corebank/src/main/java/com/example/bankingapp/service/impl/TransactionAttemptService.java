@@ -25,6 +25,22 @@ public class TransactionAttemptService {
         this.transactionRepository = transactionRepository;
     }
 
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void recordTransferFailure(BankAccount account, BigDecimal amount, String failureReason) {
+        String reference = "FAIL" + UUID.randomUUID().toString().replace("-", "")
+                .substring(0, 16).toUpperCase();
+        Transaction transaction = new Transaction(
+                TransactionType.TRANSFER_SENT,
+                amount,
+                reference,
+                "Failed transfer",
+                TransactionStatus.FAILED,
+                failureReason
+        );
+        transaction.setBankAccount(account);
+        transactionRepository.save(transaction);
+    }
+
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordFailure(Long accountId, TransactionType type, BigDecimal amount,
                               String failureReason) {

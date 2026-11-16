@@ -4,6 +4,7 @@ import com.example.bankingapp.dto.AccountResponse;
 import com.example.bankingapp.dto.AdminTransactionResponse;
 import com.example.bankingapp.dto.AdminSummaryResponse;
 import com.example.bankingapp.dto.CreateAccountRequest;
+import com.example.bankingapp.dto.CustomerTransferResponse;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
 import com.example.bankingapp.dto.TransactionResponse;
@@ -37,6 +38,8 @@ public interface AccountService {
     TransferRecipientResponse previewTransferRecipient(Long sourceAccountId, String accountNumber, String username);
 
     TransferResponse transfer(TransferRequest request, String username, boolean admin);
+
+    CustomerTransferResponse transferCustomer(TransferRequest request, String username, String idempotencyKey);
 
     Page<TransactionResponse> getTransactions(Long accountId, Pageable pageable, String username, boolean admin);
 

@@ -2,6 +2,7 @@ package com.example.bankingapp.controller;
 
 import com.example.bankingapp.dto.AccountResponse;
 import com.example.bankingapp.dto.CreateAccountRequest;
+import com.example.bankingapp.dto.CustomerTransferResponse;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
 import com.example.bankingapp.dto.TransactionResponse;
@@ -74,9 +75,11 @@ public class CustomerAccountController {
     }
 
     @PostMapping("/transfer")
-    public TransferResponse transfer(@Valid @RequestBody TransferRequest request,
-                                     Authentication authentication) {
-        return accountService.transfer(request, authentication.getName(), false);
+    public CustomerTransferResponse transfer(@Valid @RequestBody TransferRequest request,
+                                             @RequestHeader(name = "Idempotency-Key", required = false)
+                                             String idempotencyKey,
+                                             Authentication authentication) {
+        return accountService.transferCustomer(request, authentication.getName(), idempotencyKey);
     }
 
     @GetMapping("/{accountId}/transactions")

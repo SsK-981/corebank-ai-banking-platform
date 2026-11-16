@@ -1,5 +1,6 @@
 document.addEventListener('DOMContentLoaded', () => {
   const STORAGE_KEY = 'corebank-customer-session';
+  const TRANSFER_KEY_PREFIX = 'corebank-pending-transfer:';
   const money = new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
@@ -10,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
   let currentAccount = null;
   let conversationId = null;
   let pendingTransfer = null;
+  let unresolvedTransfer = null;
+  let inFlightTransfer = null;
   let recipientLookupTimer;
   let recipientLookup;
   const sameAccountMessage =
@@ -35,6 +38,47 @@ document.addEventListener('DOMContentLoaded', () => {
   function tokenHeader() {
     return session?.token ? { Authorization: `Basic ${session.token}` } : {};
   }
+  function transferStorageKey() {
+    const customer =
+      session?.user?.id ?? session?.user?.email ?? session?.email;
+    return customer ? `${TRANSFER_KEY_PREFIX}${customer}` : null;
+  }
+  function readUnresolvedTransfer() {
+    const key = transferStorageKey();
+    try {
+      const saved = key
+        ? JSON.parse(sessionStorage.getItem(key) || 'null')
+        : null;
+      return saved?.key && saved?.payload ? saved : null;
+    } catch {
+      return null;
+    }
+  }
+  function saveUnresolvedTransfer(transfer) {
+    const key = transferStorageKey();
+    unresolvedTransfer = transfer;
+    if (key && transfer) sessionStorage.setItem(key, JSON.stringify(transfer));
+    updateTransferRetry();
+  }
+  function clearUnresolvedTransfer() {
+    const key = transferStorageKey();
+    if (key) sessionStorage.removeItem(key);
+    unresolvedTransfer = null;
+    updateTransferRetry();
+  }
+  function updateTransferRetry() {
+    const retry = $('transfer-retry');
+    const detail = $('transfer-pending-detail');
+    const payload = unresolvedTransfer?.payload;
+    retry.classList.toggle('hidden', !payload);
+    retry.disabled = Boolean(inFlightTransfer);
+    detail.classList.toggle('hidden', !payload);
+    detail.textContent = payload
+      ? `Resolve the ${money.format(Number(payload.amount))} transfer to account ending in ${payload.toAccountNumber.slice(-4)} before sending another transfer.`
+      : '';
+    $('transfer-form').querySelector('button[type="submit"]').disabled =
+      Boolean(unresolvedTransfer || inFlightTransfer);
+  }
   async function request(url, options = {}, authenticated = true) {
     let response;
     try {
@@ -52,6 +96,7 @@ document.addEventListener('DOMContentLoaded', () => {
       );
     }
     if (!response.ok) {
+      const status = response.status;
       let text =
         response.status === 401 || response.status === 403
           ? 'Your session has expired. Please sign in again.'
@@ -63,7 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
           (typeof data.detail === 'string' ? data.detail : data.message) ||
           text;
       } catch {}
-      throw new Error(text);
+      const error = new Error(text);
+      error.status = status;
+      throw error;
     }
     if (response.status === 204) return null;
     return response.json();
@@ -80,7 +127,9 @@ document.addEventListener('DOMContentLoaded', () => {
   function setSession(email, password, user) {
     session = { email, token: btoa(`${email}:${password}`), user };
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    unresolvedTransfer = readUnresolvedTransfer();
     renderSession();
+    updateTransferRetry();
   }
   function renderSession() {
     const loggedIn = Boolean(session?.user);
@@ -108,6 +157,9 @@ document.addEventListener('DOMContentLoaded', () => {
     accounts = [];
     conversationId = null;
     pendingTransfer = null;
+    unresolvedTransfer = null;
+    inFlightTransfer = null;
+    updateTransferRetry();
     transactionRequest++;
     clearRecipientPreview();
     for (const id of ['account-cards', 'recent-transactions', 'activity-list'])
@@ -659,6 +711,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $('transfer-from').addEventListener('change', showRecipientPreview);
   $('transfer-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (unresolvedTransfer || inFlightTransfer) return;
     const from = transferSource(),
       to = $('transfer-to').value.trim(),
       amount = Number($('transfer-amount').value);
@@ -700,7 +753,11 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
 
       renderRecipientCard(recipient.maskedName, to);
-      pendingTransfer = { from, to, amount: amount.toFixed(2) };
+      pendingTransfer = {
+        from,
+        to,
+        amount: amount.toFixed(2),
+      };
       $('confirm-dialog').returnValue = '';
       $('dialog-title').textContent = 'Review transfer';
       $('dialog-copy').textContent =
@@ -716,34 +773,65 @@ document.addEventListener('DOMContentLoaded', () => {
     const transfer = pendingTransfer;
     pendingTransfer = null;
     if ($('confirm-dialog').returnValue !== 'confirm' || !transfer) return;
-    const submit = $('transfer-form').querySelector('button');
-    submit.disabled = true;
+    if (unresolvedTransfer || inFlightTransfer || !session?.user) return;
+    const stored = {
+      key: crypto.randomUUID(),
+      payload: {
+        fromAccountId: transfer.from.accountId,
+        toAccountNumber: transfer.to,
+        amount: transfer.amount,
+      },
+    };
+    saveUnresolvedTransfer(stored);
+    await sendTransfer(stored);
+  });
+
+  async function sendTransfer(transfer) {
+    if (inFlightTransfer) return;
+    const activeSession = session;
+    inFlightTransfer = transfer;
+    updateTransferRetry();
     try {
       const result = await request('/customer/accounts/transfer', {
         method: 'POST',
-        body: JSON.stringify({
-          fromAccountId: transfer.from.accountId,
-          toAccountNumber: transfer.to,
-          amount: transfer.amount,
-        }),
+        headers: { 'Idempotency-Key': transfer.key },
+        body: JSON.stringify(transfer.payload),
+        signal: AbortSignal.timeout(15000),
       });
-      accounts = accounts.map((a) =>
-        a.accountId === result.fromAccount.accountId ? result.fromAccount : a,
-      );
-      currentAccount = result.fromAccount;
+      if (session !== activeSession) return;
+      if (!result?.referenceNumber) {
+        throw new Error('CoreBank did not return a transfer receipt.');
+      }
+      clearUnresolvedTransfer();
       $('transfer-form').reset();
       clearRecipientPreview();
-      renderAccounts();
-      await loadTransactions();
       message(
         'transfer-result',
         `Transfer complete · Receipt reference ${result.referenceNumber}`,
       );
+      loadAccounts();
     } catch (error) {
-      message('transfer-result', error.message, false);
+      if (session !== activeSession) return;
+      if (error.status === 400 || error.status === 404) {
+        clearUnresolvedTransfer();
+        message('transfer-result', error.message, false);
+      } else {
+        message(
+          'transfer-result',
+          `${error.message} The outcome is unconfirmed. Use Retry transfer to send the same request safely.`,
+          false,
+        );
+      }
     } finally {
-      submit.disabled = false;
+      if (inFlightTransfer === transfer) {
+        inFlightTransfer = null;
+        updateTransferRetry();
+      }
     }
+  }
+
+  $('transfer-retry').addEventListener('click', () => {
+    if (unresolvedTransfer) sendTransfer(unresolvedTransfer);
   });
 
   $('chat-form').addEventListener('submit', async (e) => {
@@ -792,7 +880,9 @@ document.addEventListener('DOMContentLoaded', () => {
       .then((user) => {
         session.user = user;
         sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+        unresolvedTransfer = readUnresolvedTransfer();
         renderSession();
+        updateTransferRetry();
         return loadAccounts();
       })
       .catch(logout);

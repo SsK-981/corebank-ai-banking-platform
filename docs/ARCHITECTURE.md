@@ -41,3 +41,17 @@ demo client and never talks directly to either database.
   update.
 - High account activity risk: the system recommends manual review and does not
   auto-approve.
+
+## Customer transfer retries
+
+The portal creates one idempotency key when a customer confirms a transfer.
+CoreBank locks the source and destination rows in ascending account-ID order.
+It checks funds under those locks and commits the result in the same transaction
+as the debit and credit or the insufficient-funds attempt. A repeat with the
+same key and transfer details receives that result. Reusing the key with changed
+details returns a conflict. The customer receipt returns a masked recipient
+name, and the portal refreshes the latest balance after receiving the receipt.
+
+The portal keeps one unresolved transfer per customer in the current tab.
+If a response is lost, **Retry transfer** resends its original request. The
+same retry is safe if the first request already committed.

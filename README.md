@@ -86,8 +86,9 @@ More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 - **Customer-scoped access:** CoreBank authenticates the portal customer, FastAPI
   verifies the internal support request, and CoreBank rechecks account ownership.
   The standalone Streamlit client uses FastAPI JWT authentication.
-- **Banking integrity controls:** money uses decimal types, transfers are transactional,
-  failed attempts are persisted, and optimistic locking prevents silent balance loss.
+- **Banking integrity controls:** transfers lock the two account rows in account-ID
+  order and post both balance changes together. The portal reuses an idempotency key
+  to recover the original receipt if a transfer response is lost.
 
 ## Tech stack
 
@@ -161,8 +162,8 @@ Threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
 - Account activity risk is rule-based and should not be described as fraud detection.
 - PostgreSQL-backed concurrency tests should be expanded beyond the current local test
   coverage.
-- Money movement still needs explicit idempotency keys and ledger-style postings before
-  it can model retry-safe banking transfers.
+- Retry protection covers customer transfers submitted with an idempotency key.
+  The app models internal account movements with paired transaction records.
 - A reproducible agent evaluation dataset should be added for intent accuracy, tool
   selection, refusal behavior, and provider-failure recovery.
 
