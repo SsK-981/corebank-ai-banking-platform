@@ -278,6 +278,50 @@ p {
   border: 0 !important;
   box-shadow: none !important;
 }
+.recipient-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 15px 16px;
+  border: 1px solid #b6dace;
+  border-radius: 14px;
+  background: #f0f8f4;
+}
+.recipient-card.hidden {
+  display: none;
+}
+.recipient-card-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--green);
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+.recipient-card-details {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.recipient-card-label {
+  color: var(--green-dark);
+  font-size: 12px;
+  font-weight: 700;
+}
+.recipient-card-name {
+  color: var(--ink);
+  font-size: 19px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.recipient-card-account {
+  color: #49645d;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
 .message {
   padding: 10px 12px;
   border-radius: 8px;

@@ -612,6 +612,24 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   }
 
+  function renderRecipientCard(maskedName, accountNumber) {
+    const card = $('recipient-preview');
+    card.className = 'recipient-card';
+    card.replaceChildren();
+
+    const icon = appendText(card, 'span', '✓', 'recipient-card-icon');
+    icon.setAttribute('aria-hidden', 'true');
+    const details = appendText(card, 'div', '', 'recipient-card-details');
+    appendText(details, 'span', 'Recipient found', 'recipient-card-label');
+    appendText(details, 'strong', maskedName, 'recipient-card-name');
+    appendText(
+      details,
+      'span',
+      `Account ending in ${accountNumber.slice(-4)}`,
+      'recipient-card-account',
+    );
+  }
+
   function showRecipientPreview() {
     clearRecipientPreview();
     hideMessage('transfer-result');
@@ -629,7 +647,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const recipient = await lookupRecipient(from, to, signal);
         if (!signal.aborted) {
-          message('recipient-preview', `Recipient: ${recipient.maskedName}`);
+          renderRecipientCard(recipient.maskedName, to);
         }
       } catch (error) {
         if (!signal.aborted) message('recipient-preview', error.message, false);
@@ -681,7 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
       )
         return;
 
-      message('recipient-preview', `Recipient: ${recipient.maskedName}`);
+      renderRecipientCard(recipient.maskedName, to);
       pendingTransfer = { from, to, amount: amount.toFixed(2) };
       $('confirm-dialog').returnValue = '';
       $('dialog-title').textContent = 'Review transfer';
