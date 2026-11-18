@@ -94,3 +94,24 @@ jobs:
           COREBANK_SERVICE_TOKEN: local-corebank-service-token-change-me
           COREBANK_FALLBACK_TO_LOCAL: "false"
         run: python -m pytest tests/integration/test_live_corebank.py -q
+      - name: Verify support from the signed-in customer portal
+        env:
+          APP_ENV: development
+          AUTH_MODE: development
+          JWT_SECRET: ci-secret-that-is-definitely-longer-than-32-characters
+          DATABASE_URL: sqlite:///portal_ci.db
+          SEED_DEMO_DATA: "true"
+          BANKING_DATA_SOURCE: corebank
+          COREBANK_SERVICE_TOKEN: local-corebank-service-token-change-me
+          COREBANK_FALLBACK_TO_LOCAL: "false"
+          LLM_PROVIDER: local
+        run: |
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 > support-ci.log 2>&1 &
+          support_pid=$!
+          trap 'kill "$support_pid" 2>/dev/null || true' EXIT
+          if ! curl --fail --silent --retry 10 --retry-connrefused --retry-delay 1 http://127.0.0.1:8000/health/ready; then
+            cat support-ci.log
+            exit 1
+          fi
+
+          RUN_LIVE_PORTAL_HELP_TESTS=1 python -m pytest tests/integration/test_live_portal_help.py -q

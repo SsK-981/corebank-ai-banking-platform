@@ -1,130 +1,502 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CoreBank Customer Portal</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-</head>
-<body>
-    <header class="topbar">
-        <div>
-            <p class="eyebrow">Customer Portal</p>
-            <h1>Customer Dashboard</h1>
-        </div>
-        <div class="top-actions">
-            <a class="secondary-link" href="index.html">Portal Home</a>
-            <button type="button" id="logout-button" class="secondary hidden">Log Out</button>
-        </div>
-    </header>
-
-    <main class="layout">
-        <section class="panel wide" id="auth-panel">
-            <h2>Customer Access</h2>
-            <div class="portal-auth">
-                <form id="login-form" class="form-stack">
-                    <h3>Login</h3>
-                    <input type="email" id="login-email" placeholder="Customer email" required>
-                    <input type="password" id="login-password" placeholder="Password" required>
-                    <button type="submit">Login as Customer</button>
-                    <p id="login-result" class="message hidden"></p>
-                </form>
-                <form id="register-form" class="form-stack">
-                    <h3>Create Customer and Bank Account</h3>
-                    <input type="text" id="register-name" placeholder="Full name" required>
-                    <input type="email" id="register-email" placeholder="Email" required>
-                    <input type="password" id="register-password" placeholder="Password, minimum 8 chars" minlength="8" required>
-                    <input type="text" id="register-holder-name" placeholder="Bank account holder name" required>
-                    <input type="number" id="register-opening-deposit" placeholder="Opening deposit" min="0" step="0.01" required>
-                    <button type="submit">Sign Up as Customer</button>
-                    <p id="register-result" class="message hidden"></p>
-                </form>
-            </div>
-            <p id="current-user" class="session-line">You are not logged in.</p>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f4f7f6" />
+    <title>Customer banking | CoreBank</title>
+    <link rel="stylesheet" href="customer.css" />
+    <script src="customer.js" defer></script>
+  </head>
+  <body>
+    <div id="auth-view" class="auth-view">
+      <header class="brand">
+        <a href="customer.html" class="brand-mark" aria-label="CoreBank home"
+          >C</a
+        ><span>corebank</span
+        ><a href="admin.html" class="admin-link">Staff access</a>
+      </header>
+      <main class="auth-layout">
+        <section class="welcome-copy">
+          <p class="eyebrow">CoreBank customer portal</p>
+          <h1>Manage your<br /><span>CoreBank accounts.</span></h1>
+          <p>
+            See your balance, move money, and get help whenever you need it.
+          </p>
         </section>
-
-        <section class="workspace-banner signed-in-panel hidden">
-            <div>
-                <p class="eyebrow">Customer Workspace</p>
-                <h2>Personal Banking</h2>
-            </div>
-            <p id="customer-role-line">Role: CUSTOMER</p>
-        </section>
-
-        <section class="account-hero signed-in-panel hidden">
-            <div>
-                <p class="eyebrow">Selected Account</p>
-                <h2 id="display-holder-name">No account selected</h2>
-                <p id="display-account-meta">Create or select your account to begin.</p>
-            </div>
-            <div class="balance-box">
-                <span>Available Balance</span>
-                <strong>Rs <span id="display-balance">0.00</span></strong>
-            </div>
-        </section>
-
-        <section class="panel wide signed-in-panel hidden">
-            <h2>Money Movement</h2>
-            <div class="money-grid">
-                <form id="withdraw-form" class="form-stack">
-                    <h3>Withdraw</h3>
-                    <input type="number" id="withdraw-amount" placeholder="Amount" min="0.01" step="0.01" required>
-                    <button type="submit">Withdraw</button>
-                    <p id="withdraw-result" class="message hidden"></p>
-                </form>
-                <form id="transfer-form" class="form-stack">
-                    <h3>Transfer</h3>
-                    <input type="text" id="transfer-to" placeholder="To account ID or account number" required>
-                    <input type="number" id="transfer-amount" placeholder="Amount" min="0.01" step="0.01" required>
-                    <button type="submit">Transfer</button>
-                    <p id="transfer-result" class="message hidden"></p>
-                </form>
-            </div>
-        </section>
-
-        <section class="panel signed-in-panel hidden">
-            <div class="section-head">
-                <h2>Account Actions</h2>
-                <button type="button" id="download-statement" class="secondary">Export CSV</button>
-            </div>
-            <form id="rename-form" class="inline-form">
-                <input type="text" id="rename-holder" placeholder="New holder name" required>
-                <button type="submit">Update</button>
+        <section class="auth-card">
+          <div class="auth-tabs" role="tablist" aria-label="Account access">
+            <button
+              type="button"
+              class="auth-tab active"
+              id="login-tab"
+              role="tab"
+              aria-selected="true"
+              aria-controls="login-pane"
+            >
+              Sign in</button
+            ><button
+              type="button"
+              class="auth-tab"
+              id="register-tab"
+              role="tab"
+              aria-selected="false"
+              aria-controls="register-pane"
+            >
+              Create account
+            </button>
+          </div>
+          <div id="login-pane" role="tabpanel" aria-labelledby="login-tab">
+            <h2>Welcome back</h2>
+            <p class="subtle">Sign in to your customer account.</p>
+            <form id="login-form" class="form-stack">
+              <label
+                >Email address<input
+                  type="email"
+                  id="login-email"
+                  autocomplete="username"
+                  placeholder="you@example.com"
+                  required /></label
+              ><label
+                >Password<input
+                  type="password"
+                  id="login-password"
+                  autocomplete="current-password"
+                  placeholder="Your password"
+                  required /></label
+              ><button class="primary" type="submit">
+                Sign in <span aria-hidden="true">→</span>
+              </button>
+              <p
+                id="login-result"
+                class="message hidden"
+                role="status"
+                aria-live="polite"
+              ></p>
             </form>
-            <button type="button" id="close-account" class="danger">Close Zero-Balance Account</button>
-            <p id="account-action-result" class="message hidden"></p>
+            <div class="demo-box">
+              <label for="demo-customer">Local demo customer</label>
+              <select id="demo-customer">
+                <option value="amit@example.com">Amit Verma · U002</option>
+                <option value="rahul@example.com">Rahul Sharma · U001</option>
+                <option value="neha@example.com">Neha Patil · U003</option>
+              </select>
+              <button id="demo-login" type="button" class="text-button">
+                Try demo account <span aria-hidden="true">↗</span>
+              </button>
+            </div>
+          </div>
+          <div
+            id="register-pane"
+            class="hidden"
+            role="tabpanel"
+            aria-labelledby="register-tab"
+          >
+            <h2>Let’s get you started</h2>
+            <p class="subtle">Create your profile and first account.</p>
+            <form id="register-form" class="form-stack">
+              <label
+                >Full name<input
+                  type="text"
+                  id="register-name"
+                  autocomplete="name"
+                  placeholder="Your full name"
+                  required /></label
+              ><label
+                >Email address<input
+                  type="email"
+                  id="register-email"
+                  autocomplete="email"
+                  placeholder="you@example.com"
+                  required /></label
+              ><label
+                >Password<input
+                  type="password"
+                  id="register-password"
+                  autocomplete="new-password"
+                  minlength="8"
+                  placeholder="At least 8 characters"
+                  required /></label
+              ><label
+                >Account holder name<input
+                  type="text"
+                  id="register-holder-name"
+                  placeholder="Name on account"
+                  required /></label
+              ><label
+                >Opening deposit
+                <span class="currency-input"
+                  ><span>₹</span
+                  ><input
+                    type="number"
+                    id="register-opening-deposit"
+                    min="0"
+                    step="0.01"
+                    value="0"
+                    required /></span></label
+              ><button type="submit" class="primary">
+                Create account <span aria-hidden="true">→</span>
+              </button>
+              <p
+                id="register-result"
+                class="message hidden"
+                role="status"
+                aria-live="polite"
+              ></p>
+            </form>
+          </div>
         </section>
-
-        <section class="panel wide signed-in-panel hidden">
-            <div class="section-head">
-                <h2>My Accounts</h2>
-                <button type="button" id="refresh-accounts" class="secondary">Refresh</button>
+      </main>
+      <footer class="auth-footer">Local banking demo · Synthetic data</footer>
+    </div>
+    <div id="app-view" class="app-view hidden">
+      <aside class="sidebar">
+        <a href="#overview" class="brand"
+          ><span class="brand-mark">C</span><span>corebank</span></a
+        >
+        <nav class="main-nav" aria-label="Main navigation">
+          <a href="#overview" data-page="overview" class="nav-link active"
+            ><span>⌂</span>Overview</a
+          ><a href="#transfer" data-page="transfer" class="nav-link"
+            ><span>↗</span>Transfer</a
+          ><a href="#activity" data-page="activity" class="nav-link"
+            ><span>↕</span>Activity</a
+          ><a href="#help" data-page="help" class="nav-link"
+            ><span>♡</span>Help
+          </a>
+        </nav>
+        <div class="sidebar-bottom">
+          <button id="logout-button" class="logout-button" type="button">
+            <span>↪</span>Sign out
+          </button>
+        </div>
+      </aside>
+      <div class="app-main">
+        <header class="app-header">
+          <div><h1 id="page-title">Overview</h1></div>
+          <div class="profile-chip">
+            <span id="avatar-initials" class="avatar">A</span
+            ><span id="header-name">Customer</span
+            ><span class="online-dot" title="Signed in"></span>
+          </div>
+        </header>
+        <main class="dashboard">
+          <section id="overview-page" class="page-section">
+            <div class="greeting-row">
+              <div>
+                <p id="welcome-line" class="subtle">Good day</p>
+                <h2>Your accounts</h2>
+              </div>
+              <button id="refresh-accounts" class="quiet-button" type="button">
+                <span>↻</span> Refresh
+              </button>
             </div>
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>ID</th><th>Account No.</th><th>Holder</th><th>Balance</th><th>Status</th></tr></thead>
-                    <tbody id="accounts-table"></tbody>
-                </table>
+            <div
+              id="account-cards"
+              class="account-grid"
+              aria-label="Your accounts"
+            ></div>
+            <p id="accounts-error" class="inline-error hidden" role="alert"></p>
+            <form id="open-account-form" class="surface-card form-stack hidden">
+              <h3>Open an account</h3>
+              <label
+                >Account holder name<input id="open-holder" required
+              /></label>
+              <label
+                >Opening deposit (₹)<input
+                  id="open-deposit"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value="0"
+                  required
+              /></label>
+              <button type="submit" class="primary">Open account</button>
+              <p id="open-result" class="message hidden" role="status"></p>
+            </form>
+            <div class="overview-grid">
+              <section class="surface-card quick-card">
+                <div class="card-heading">
+                  <div><h3>Send money</h3></div>
+                  <span class="soft-icon">↗</span>
+                </div>
+                <p class="subtle">Transfer to another CoreBank account.</p>
+                <button class="primary" type="button" data-goto="transfer">
+                  Make a transfer <span>→</span>
+                </button>
+              </section>
+              <section class="surface-card recent-card">
+                <div class="card-heading">
+                  <div><h3>Recent transactions</h3></div>
+                  <button
+                    class="text-button"
+                    data-goto="activity"
+                    type="button"
+                  >
+                    See all <span>→</span>
+                  </button>
+                </div>
+                <div id="recent-transactions" class="recent-list"></div>
+                <p
+                  id="recent-error"
+                  class="inline-error hidden"
+                  role="alert"
+                ></p>
+              </section>
             </div>
-        </section>
-
-        <section class="panel wide signed-in-panel hidden">
-            <div class="section-head">
-                <h2>My Transactions</h2>
-                <button type="button" id="refresh-transactions" class="secondary">Refresh</button>
+            <section class="surface-card manage-card">
+              <div class="card-heading">
+                <div><h3>Manage selected account</h3></div>
+              </div>
+              <div class="rename-form">
+                <label for="rename-holder">Account holder name</label>
+                <input id="rename-holder" type="text" readonly
+                       aria-describedby="holder-name-guidance" />
+                <p id="holder-name-guidance" class="subtle">
+                  Contact support if your account holder name needs a correction.
+                </p>
+              </div>
+              <form id="withdraw-form" class="rename-form">
+                <label for="withdraw-amount">Withdrawal amount</label
+                ><input
+                  id="withdraw-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                /><button class="quiet-button" type="submit">Withdraw</button>
+              </form>
+              <p
+                id="account-action-result"
+                class="message hidden"
+                role="status"
+                aria-live="polite"
+              ></p>
+              <button id="download-statement" class="text-button" type="button">
+                Download statement CSV <span>↓</span></button
+              ><button id="close-account" class="close-link" type="button">
+                Close this account
+              </button>
+            </section>
+          </section>
+          <section id="transfer-page" class="page-section hidden">
+            <div class="section-intro">
+              <span class="soft-icon">↗</span>
+              <div>
+                <h2>Send money</h2>
+                <p class="subtle">Send money to another CoreBank account.</p>
+              </div>
             </div>
-            <div class="table-wrap">
-                <table>
-                    <thead><tr><th>Reference</th><th>Type</th><th>Status</th><th>Amount</th><th>Date</th><th>Description</th></tr></thead>
-                    <tbody id="transactions-table"></tbody>
-                </table>
+            <div class="surface-card transfer-card">
+              <div class="transfer-steps">
+                <span class="step active">1 <small>Details</small></span
+                ><i></i><span class="step">2 <small>Review</small></span>
+              </div>
+              <form id="transfer-form" class="form-stack">
+                <label
+                  >From account<select
+                    id="transfer-from"
+                    required
+                    aria-label="Select source account"
+                  ></select></label
+                >
+                <div id="saved-recipient-picker" class="saved-recipient-picker hidden">
+                  <label>Saved recipients
+                    <select id="saved-recipient"></select>
+                  </label>
+                  <button id="remove-recipient" type="button" class="quiet-button" disabled>
+                    Remove
+                  </button>
+                </div>
+                <label
+                  >Recipient account number<input
+                    type="text"
+                    id="transfer-to"
+                    aria-describedby="recipient-preview"
+                    inputmode="numeric"
+                    autocomplete="off"
+                    placeholder="Enter account number"
+                    required
+                /></label>
+                <div id="recipient-preview" class="hidden" role="status"></div>
+                <p id="saved-recipient-status" class="message hidden" role="status"></p>
+                <label
+                  >Amount<span class="currency-input"
+                    ><span>₹</span
+                    ><input
+                      type="number"
+                      id="transfer-amount"
+                      min="0.01"
+                      step="0.01"
+                      placeholder="0.00"
+                      required /></span
+                ></label>
+                <p class="field-hint">
+                  Check the account number carefully before continuing.
+                </p>
+                <button type="submit" class="primary">
+                  Review transfer <span>→</span>
+                </button>
+                <p
+                  id="transfer-pending-detail"
+                  class="field-hint hidden"
+                  role="status"
+                ></p>
+                <button
+                  id="transfer-retry"
+                  type="button"
+                  class="quiet-button hidden"
+                >
+                  Retry transfer
+                </button>
+                <p
+                  id="transfer-result"
+                  class="message hidden"
+                  role="status"
+                  aria-live="polite"
+                ></p>
+              </form>
             </div>
-        </section>
-    </main>
-
-    <script src="customer.js"></script>
-</body>
+          </section>
+          <section id="activity-page" class="page-section hidden">
+            <div class="greeting-row">
+              <div><h2>Activity</h2></div>
+              <button
+                id="refresh-transactions"
+                class="quiet-button"
+                type="button"
+              >
+                <span>↻</span> Refresh
+              </button>
+            </div>
+            <div class="surface-card activity-card">
+              <label class="filter-label"
+                >Show activity for<select
+                  id="activity-account"
+                  aria-label="Filter activity by account"
+                ></select
+              ></label>
+              <div id="activity-list" class="activity-list"></div>
+              <p
+                id="transactions-error"
+                class="inline-error hidden"
+                role="alert"
+              ></p>
+            </div>
+          </section>
+          <section id="help-page" class="page-section hidden">
+            <div class="section-intro">
+              <span class="soft-icon">♡</span>
+              <div>
+                <h2>How can we help?</h2>
+                <p class="subtle">
+                  Ask about your account or get help with a transaction.
+                </p>
+              </div>
+            </div>
+            <div class="surface-card support-card">
+              <div class="support-header">
+                <span class="support-avatar">C</span>
+                <div>
+                  <strong>CoreBank support</strong
+                  ><small><span class="online-dot"></span> Customer help</small>
+                </div>
+              </div>
+              <div class="help-actions" aria-label="Help shortcuts">
+                <button
+                  type="button"
+                  class="quiet-button"
+                  data-help-message="Explain a transaction"
+                >
+                  Explain a transaction
+                </button>
+                <button
+                  type="button"
+                  class="quiet-button"
+                  data-help-message="I need help with a failed transaction"
+                >
+                  Failed transaction
+                </button>
+                <button
+                  id="request-help-case"
+                  type="button"
+                  class="quiet-button"
+                >
+                  Open a support case
+                </button>
+                <button
+                  type="button"
+                  class="quiet-button"
+                  data-help-action="list_cases"
+                >
+                  My cases
+                </button>
+              </div>
+              <div
+                id="help-transaction-context"
+                class="help-context hidden"
+                aria-live="polite"
+              ></div>
+              <div id="chat-thread" class="chat-thread">
+                <div
+                  id="chat-messages"
+                  class="chat-messages"
+                  role="log"
+                  aria-live="polite"
+                >
+                  <div class="chat-bubble assistant">Hello! How can I help you today?</div>
+                </div>
+                <div
+                  id="help-transaction-options"
+                  class="help-options hidden"
+                ></div>
+                <div id="help-cases" class="help-cases hidden"></div>
+              </div>
+              <p id="chat-error" class="inline-error hidden" role="alert"></p>
+              <div id="chat-retry" class="chat-retry hidden">
+                <span>Message not sent.</span>
+                <button id="retry-chat" class="quiet-button" type="button">
+                  Retry
+                </button>
+              </div>
+              <div id="help-case-offer" class="case-offer hidden">
+                <span>Support can open a case for this issue.</span>
+                <button id="confirm-help-case" class="primary" type="button">
+                  Confirm open support case
+                </button>
+              </div>
+              <form id="chat-form" class="chat-form">
+                <label class="sr-only" for="chat-input"
+                  >Message CoreBank support</label
+                ><input
+                  id="chat-input"
+                  type="text"
+                  maxlength="2000"
+                  placeholder="Write a message…"
+                  required
+                /><button type="submit" aria-label="Send message">↑</button>
+              </form>
+              <p class="chat-privacy">
+                Use the demo account to try Help. Keep passwords and card
+                details out of chat.
+              </p>
+            </div>
+          </section>
+        </main>
+      </div>
+    </div>
+    <dialog id="confirm-dialog" class="confirm-dialog">
+      <form method="dialog">
+        <span class="dialog-mark">!</span>
+        <h2 id="dialog-title">Review transfer</h2>
+        <p id="dialog-copy"></p>
+        <div class="dialog-actions">
+          <button class="quiet-button" value="cancel">Go back</button
+          ><button id="dialog-confirm" class="primary" value="confirm">
+            Confirm
+          </button>
+        </div>
+      </form>
+    </dialog>
+  </body>
 </html>

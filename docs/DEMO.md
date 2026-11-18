@@ -1,33 +1,20 @@
-# 90-second demo
+# CoreBank demo walkthrough
 
-## Setup
+Run `docker compose up --build` from the repository and open the
+[customer portal](http://localhost:8080) after the seed service completes.
+The [demo accounts](../README.md#demo-accounts) use synthetic data.
 
-```powershell
-docker compose up --build
-```
-
-Open CoreBank at `http://127.0.0.1:8080` and the chatbot at
-`http://127.0.0.1:8501`.
-
-## Script
-
-1. **Architecture:** “CoreBank is the Java system of record. FastAPI is the grounded AI
-   orchestration layer. The model never receives database access.”
-2. **Live balance:** select U002 and ask `What is my account balance?`.
-3. **Live history:** ask `Show my transactions.` Point out the persisted failed attempt.
-4. **KYC:** ask `What is my KYC status?`. Change it in the CoreBank admin portal and ask
-   again to demonstrate live integration.
-5. **Account activity risk:** ask `Review account activity risk.` and expand agent
-   activity to show the tool used.
-6. **Authorization:** ask for `U001` while signed in as U002; the request is refused.
-7. **Escalation:** ask `Open a support case for this failed payment.` Show the ticket ID.
-8. **Grounding:** explain that tool-backed responses skip LLM rewriting, while greetings
-   can still use DeepSeek for natural tone.
-
-## Suggested interviewer questions
-
-- Why is `@Transactional` insufficient by itself for concurrent withdrawals?
-- Why does the AI service use a service credential instead of customer passwords?
-- What happens when DeepSeek is unavailable?
-- Which database owns KYC and transaction status?
-- How would production OIDC, mTLS, rate limiting, and monitoring be added?
+1. **Overview.** Sign in as Amit to see his account balance, recent activity,
+   and the CSV statement download.
+2. **Transfer.** Copy Rahul’s account number from his Overview. Sign in as
+   Neha and enter the number on **Transfer**. Verify the masked name, save
+   the recipient for future transfers, and review and confirm a demo transfer.
+3. **Activity.** Find the outgoing transfer using its receipt reference.
+   Sign in as Rahul to see the corresponding incoming entry.
+4. **Transaction support.** Sign in as Amit. Select **Get help** on his failed
+   withdrawal to see the recorded decline and whether the account was debited.
+5. **Support cases.** Select **Open a support case**, describe the issue, and
+   confirm the summary. Open **My cases** to find the case and view its status.
+6. **Staff console.** Open [Bank Operations](http://localhost:8080/admin.html)
+   and sign in as the demo administrator to review customer KYC or search for an
+   account.

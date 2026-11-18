@@ -4,10 +4,13 @@ import com.example.bankingapp.dto.AccountResponse;
 import com.example.bankingapp.dto.AdminTransactionResponse;
 import com.example.bankingapp.dto.AdminSummaryResponse;
 import com.example.bankingapp.dto.CreateAccountRequest;
+import com.example.bankingapp.dto.CustomerTransferResponse;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
+import com.example.bankingapp.dto.SavedRecipientResponse;
 import com.example.bankingapp.dto.RiskSignalResponse;
 import com.example.bankingapp.dto.TransactionResponse;
+import com.example.bankingapp.dto.TransferRecipientResponse;
 import com.example.bankingapp.dto.TransferRequest;
 import com.example.bankingapp.dto.TransferResponse;
 import com.example.bankingapp.dto.UpdateAccountRequest;
@@ -15,19 +18,23 @@ import com.example.bankingapp.exception.AccessDeniedBusinessException;
 import com.example.bankingapp.exception.AccountClosedException;
 import com.example.bankingapp.exception.AccountNotFoundException;
 import com.example.bankingapp.exception.InsufficientBalanceException;
+import com.example.bankingapp.exception.DuplicateResourceException;
 import com.example.bankingapp.exception.InvalidTransactionException;
 import com.example.bankingapp.mapper.BankingMapper;
 import com.example.bankingapp.model.BankAccount;
 import com.example.bankingapp.model.Transaction;
+import com.example.bankingapp.model.TransferIdempotencyRecord;
 import com.example.bankingapp.model.TransactionStatus;
 import com.example.bankingapp.model.TransactionType;
 import com.example.bankingapp.repository.BankAccountRepository;
 import com.example.bankingapp.repository.TransactionRepository;
+import com.example.bankingapp.repository.TransferIdempotencyRepository;
 import com.example.bankingapp.service.AuthService;
 import com.example.bankingapp.service.AccountService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +44,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
@@ -46,16 +54,22 @@ public class AccountServiceImpl implements AccountService {
     private final BankAccountRepository bankAccountRepository;
     private final TransactionRepository transactionRepository;
     private final AuthService authService;
+    private final JdbcTemplate jdbc;
     private final TransactionAttemptService transactionAttemptService;
+    private final TransferIdempotencyRepository transferIdempotencyRepository;
 
     public AccountServiceImpl(BankAccountRepository bankAccountRepository,
                               TransactionRepository transactionRepository,
                               AuthService authService,
-                              TransactionAttemptService transactionAttemptService) {
+                              TransactionAttemptService transactionAttemptService,
+                              TransferIdempotencyRepository transferIdempotencyRepository,
+                              JdbcTemplate jdbc) {
         this.bankAccountRepository = bankAccountRepository;
         this.transactionRepository = transactionRepository;
         this.authService = authService;
+        this.jdbc = jdbc;
         this.transactionAttemptService = transactionAttemptService;
+        this.transferIdempotencyRepository = transferIdempotencyRepository;
     }
 
     @Override
@@ -141,6 +155,10 @@ public class AccountServiceImpl implements AccountService {
 
         BankAccount account = findAccount(accountId);
         ensureOwnerOrAdmin(account, username, admin);
+        if (!admin) {
+            throw new AccessDeniedBusinessException(
+                    "Account holder names can only be corrected by a bank administrator");
+        }
         account.setHolderName(request.holderName().trim());
         return BankingMapper.toAccountResponse(bankAccountRepository.save(account));
     }
@@ -209,59 +227,266 @@ public class AccountServiceImpl implements AccountService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public TransferRecipientResponse previewTransferRecipient(Long sourceAccountId, String accountNumber, String username) {
+        return maskedRecipient(findEligibleRecipient(sourceAccountId, accountNumber, username));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SavedRecipientResponse> getSavedRecipients(String username) {
+        long ownerId = authService.findUser(username).getId();
+        return jdbc.query("""
+                SELECT account.account_number, account.holder_name
+                FROM saved_recipient saved
+                JOIN bank_account account ON account.account_id = saved.recipient_account_id
+                WHERE saved.owner_id = ? AND account.active = TRUE
+                ORDER BY account.holder_name, account.account_number
+                """, (row, index) -> new SavedRecipientResponse(
+                row.getString("account_number"), maskHolderName(row.getString("holder_name"))), ownerId);
+    }
+
+    @Override
     @Transactional
+    public SavedRecipientResponse saveRecipient(Long sourceAccountId, String accountNumber, String username) {
+        BankAccount recipient = findEligibleRecipient(sourceAccountId, accountNumber, username);
+        long ownerId = authService.findUser(username).getId();
+        // Serialize saves for this customer so repeated requests share one row.
+        jdbc.queryForObject("SELECT id FROM app_user WHERE id = ? FOR UPDATE", Long.class, ownerId);
+        jdbc.update("""
+                INSERT INTO saved_recipient (owner_id, recipient_account_id)
+                SELECT ?, ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM saved_recipient WHERE owner_id = ? AND recipient_account_id = ?
+                )
+                """, ownerId, recipient.getAccountId(), ownerId, recipient.getAccountId());
+        return new SavedRecipientResponse(recipient.getAccountNumber(), maskHolderName(recipient.getHolderName()));
+    }
+
+    @Override
+    @Transactional
+    public void removeSavedRecipient(String accountNumber, String username) {
+        long ownerId = authService.findUser(username).getId();
+        jdbc.update("""
+                DELETE FROM saved_recipient WHERE owner_id = ?
+                AND recipient_account_id = (SELECT account_id FROM bank_account WHERE account_number = ?)
+                """, ownerId, accountNumber);
+    }
+
+    private BankAccount findEligibleRecipient(Long sourceAccountId, String accountNumber, String username) {
+        BankAccount source = findAccount(sourceAccountId);
+        ensureOwnerOrAdmin(source, username, false);
+        ensureActive(source);
+
+        if (!accountNumber.matches("[0-9]{12}")) {
+            throw new InvalidTransactionException("Enter a valid 12-digit account number.");
+        }
+        if (source.getAccountNumber().equals(accountNumber)) {
+            throw new InvalidTransactionException("The recipient account must be different from the source account.");
+        }
+
+        return bankAccountRepository.findByAccountNumber(accountNumber)
+                .filter(BankAccount::isActive)
+                .orElseThrow(() -> new AccountNotFoundException("No eligible recipient was found for this account number."));
+    }
+
+    @Override
+    @Transactional(noRollbackFor = InsufficientBalanceException.class)
     public TransferResponse transfer(TransferRequest request, String username, boolean admin) {
+        PostedTransfer posted = postTransfer(request, username, admin);
+        return new TransferResponse(
+                BankingMapper.toAccountResponse(posted.source()),
+                BankingMapper.toAccountResponse(posted.destination()),
+                posted.referenceNumber()
+        );
+    }
+
+    @Override
+    @Transactional(noRollbackFor = InsufficientBalanceException.class)
+    public CustomerTransferResponse transferCustomer(
+            TransferRequest request, String username, String idempotencyKey) {
+        if (idempotencyKey != null
+                && (idempotencyKey.isBlank() || idempotencyKey.length() > 100)) {
+            throw new InvalidTransactionException("A valid Idempotency-Key is required.");
+        }
+
+        String normalizedOwnerEmail = username.toLowerCase(Locale.ROOT);
+        BigDecimal amount = normalizedTransferAmount(request);
+        LockedTransferAccounts locked = lockTransferAccounts(request, normalizedOwnerEmail, false);
+        var existing = idempotencyKey == null ? Optional.<TransferIdempotencyRecord>empty()
+                : transferIdempotencyRepository.findByOwnerEmailAndIdempotencyKey(
+                        normalizedOwnerEmail, idempotencyKey);
+        if (existing.isPresent()) {
+            TransferIdempotencyRecord saved = existing.get();
+            if (!saved.getSourceAccountId().equals(locked.source().getAccountId())
+                    || !saved.getDestinationAccountId().equals(locked.destination().getAccountId())
+                    || saved.getAmount().compareTo(amount) != 0) {
+                throw new DuplicateResourceException(
+                        "This Idempotency-Key has already been used for a different transfer.");
+            }
+            if (TransactionStatus.FAILED.name().equals(saved.getOutcomeStatus())) {
+                throw new InsufficientBalanceException(saved.getFailureMessage());
+            }
+            return replayResponse(saved, normalizedOwnerEmail);
+        }
+
+        TransferRecipientResponse recipient = maskedRecipient(locked.destination());
+        PostedTransfer posted;
+        try {
+            posted = applyTransfer(locked.source(), locked.destination(), amount);
+        } catch (InsufficientBalanceException exception) {
+            rememberTransferOutcome(normalizedOwnerEmail, idempotencyKey, amount, locked,
+                    recipient, null, TransactionStatus.FAILED, exception.getMessage());
+            throw exception;
+        }
+
+        rememberTransferOutcome(normalizedOwnerEmail, idempotencyKey, amount, locked,
+                recipient, posted.referenceNumber(), TransactionStatus.POSTED, null);
+        return new CustomerTransferResponse(
+                BankingMapper.toAccountResponse(posted.source()), recipient, posted.referenceNumber());
+    }
+
+    private void rememberTransferOutcome(String ownerEmail, String idempotencyKey, BigDecimal amount,
+                                         LockedTransferAccounts accounts, TransferRecipientResponse recipient,
+                                         String reference, TransactionStatus status, String failureMessage) {
+        if (idempotencyKey == null) {
+            return;
+        }
+        BankAccount source = accounts.source();
+        transferIdempotencyRepository.saveAndFlush(new TransferIdempotencyRecord(
+                ownerEmail,
+                idempotencyKey,
+                source.getAccountId(),
+                accounts.destination().getAccountId(),
+                amount,
+                reference,
+                source.getAccountNumber(),
+                source.getHolderName(),
+                source.getBalance(),
+                recipient.maskedName(),
+                status.name(),
+                failureMessage
+        ));
+    }
+
+    private CustomerTransferResponse replayResponse(TransferIdempotencyRecord saved, String username) {
+        AccountResponse originalSource = new AccountResponse(
+                saved.getSourceAccountId(),
+                saved.getSourceAccountNumber(),
+                saved.getSourceHolderName(),
+                saved.getSourceBalance(),
+                true,
+                username
+        );
+        return new CustomerTransferResponse(
+                originalSource,
+                new TransferRecipientResponse(saved.getMaskedRecipientName()),
+                saved.getReferenceNumber()
+        );
+    }
+
+    private PostedTransfer postTransfer(TransferRequest request, String username, boolean admin) {
+        LockedTransferAccounts accounts = lockTransferAccounts(request, username, admin);
+        return applyTransfer(accounts.source(), accounts.destination(), normalizedTransferAmount(request));
+    }
+
+    private BigDecimal normalizedTransferAmount(TransferRequest request) {
         if (request.fromAccountId() == null) {
             throw new InvalidTransactionException("Source account ID is required");
         }
         validatePositiveAmount(request.amount());
+        try {
+            return request.amount().setScale(2, RoundingMode.UNNECESSARY);
+        } catch (ArithmeticException exception) {
+            throw new InvalidTransactionException("Amount cannot have more than two decimal places");
+        }
+    }
 
-        BankAccount fromAccount = findAccount(request.fromAccountId());
-        ensureOwnerOrAdmin(fromAccount, username, admin);
-        BankAccount toAccount = findDestinationAccount(request);
+    private LockedTransferAccounts lockTransferAccounts(
+            TransferRequest request, String username, boolean admin) {
+        Long sourceAccountId = request.fromAccountId();
+        if (sourceAccountId == null) {
+            throw new InvalidTransactionException("Source account ID is required");
+        }
+        if (!admin && !bankAccountRepository.existsByAccountIdAndOwnerEmailIgnoreCase(sourceAccountId, username)) {
+            throw new AccessDeniedBusinessException("You can only access your own accounts");
+        }
 
-        if (fromAccount.getAccountId().equals(toAccount.getAccountId())) {
+        Long destinationAccountId;
+        if (request.toAccountNumber() != null && !request.toAccountNumber().isBlank()) {
+            destinationAccountId = bankAccountRepository
+                    .findAccountIdByAccountNumber(request.toAccountNumber().trim())
+                    .orElseThrow(() -> new AccountNotFoundException("Destination account not found"));
+        } else if (request.toAccountId() != null) {
+            destinationAccountId = request.toAccountId();
+        } else {
+            throw new InvalidTransactionException("Destination account ID or account number is required");
+        }
+        if (sourceAccountId.equals(destinationAccountId)) {
             throw new InvalidTransactionException("Cannot transfer money to the same account");
         }
 
-        ensureActive(fromAccount);
-        ensureActive(toAccount);
+        boolean sourceFirst = sourceAccountId < destinationAccountId;
+        BankAccount first = lockAccount(sourceFirst ? sourceAccountId : destinationAccountId);
+        BankAccount second = lockAccount(sourceFirst ? destinationAccountId : sourceAccountId);
+        BankAccount source = sourceFirst ? first : second;
+        BankAccount destination = sourceFirst ? second : first;
+        ensureOwnerOrAdmin(source, username, admin);
+        return new LockedTransferAccounts(source, destination);
+    }
 
-        if (fromAccount.getBalance().compareTo(request.amount()) < 0) {
-            transactionAttemptService.recordFailure(
-                    fromAccount.getAccountId(),
-                    TransactionType.TRANSFER_SENT,
-                    request.amount(),
+    private BankAccount lockAccount(Long accountId) {
+        return bankAccountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new AccountNotFoundException("Account not found"));
+    }
+
+    private PostedTransfer applyTransfer(BankAccount source, BankAccount destination, BigDecimal amount) {
+        ensureActive(source);
+        ensureActive(destination);
+        if (source.getBalance().compareTo(amount) < 0) {
+            transactionAttemptService.recordTransferFailure(
+                    source,
+                    amount,
                     "Insufficient balance for transfer"
             );
             throw new InsufficientBalanceException("Insufficient balance for transfer");
         }
 
-        String transferReference = generateReferenceNumber();
-        fromAccount.setBalance(fromAccount.getBalance().subtract(request.amount()));
-        toAccount.setBalance(toAccount.getBalance().add(request.amount()));
-
-        fromAccount.addTransaction(new Transaction(
+        String reference = generateReferenceNumber();
+        source.setBalance(source.getBalance().subtract(amount));
+        destination.setBalance(destination.getBalance().add(amount));
+        source.addTransaction(new Transaction(
                 TransactionType.TRANSFER_SENT,
-                request.amount(),
-                transferReference + "S",
-                "Transfer " + transferReference + " to account " + toAccount.getAccountNumber()
+                amount,
+                reference + "S",
+                "Transfer " + reference + " to account " + destination.getAccountNumber()
         ));
-        toAccount.addTransaction(new Transaction(
+        destination.addTransaction(new Transaction(
                 TransactionType.TRANSFER_RECEIVED,
-                request.amount(),
-                transferReference + "R",
-                "Transfer " + transferReference + " from account " + fromAccount.getAccountNumber()
+                amount,
+                reference + "R",
+                "Transfer " + reference + " from account " + source.getAccountNumber()
         ));
+        bankAccountRepository.save(source);
+        bankAccountRepository.save(destination);
+        return new PostedTransfer(source, destination, reference);
+    }
 
-        bankAccountRepository.save(fromAccount);
-        bankAccountRepository.save(toAccount);
+    private TransferRecipientResponse maskedRecipient(BankAccount recipient) {
+        return new TransferRecipientResponse(maskHolderName(recipient.getHolderName()));
+    }
 
-        return new TransferResponse(
-                BankingMapper.toAccountResponse(fromAccount),
-                BankingMapper.toAccountResponse(toAccount),
-                transferReference
-        );
+    private String maskHolderName(String holderName) {
+        String[] names = holderName.strip().split("\\s+", 2);
+        String surname = names.length == 2 ? names[1] : names[0];
+        String initial = surname.substring(0, surname.offsetByCodePoints(0, 1));
+        return names.length == 2 ? names[0] + " " + initial + "•••" : initial + "•••";
+    }
+
+    private record LockedTransferAccounts(BankAccount source, BankAccount destination) {
+    }
+
+    private record PostedTransfer(BankAccount source, BankAccount destination, String referenceNumber) {
     }
 
     @Override
@@ -479,19 +704,6 @@ public class AccountServiceImpl implements AccountService {
                 transaction.getStatus(),
                 transaction.getFailureReason()
         );
-    }
-
-    private BankAccount findDestinationAccount(TransferRequest request) {
-        if (request.toAccountNumber() != null && !request.toAccountNumber().isBlank()) {
-            return bankAccountRepository.findByAccountNumber(request.toAccountNumber().trim())
-                    .orElseThrow(() -> new AccountNotFoundException("Destination account not found"));
-        }
-
-        if (request.toAccountId() != null) {
-            return findAccount(request.toAccountId());
-        }
-
-        throw new InvalidTransactionException("Destination account ID or account number is required");
     }
 
     private void ensureActive(BankAccount account) {

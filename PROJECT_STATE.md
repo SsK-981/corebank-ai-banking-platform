@@ -1,0 +1,166 @@
+# Fintech AI project state
+
+## Current branch
+
+`feat/customer-workspace` is based on GitHub `main` at `9adb7ec`. The
+existing developer checkout was left intact, including its local chatbot outage
+changes. The customer portal is the demo entry point at the CoreBank origin.
+
+## Implemented
+
+- Responsive CoreBank workspace with one-click seeded sign-in, overview,
+  reviewed internal transfers, receipt references, activity, CSV statements,
+  and an embedded support panel.
+- The portal keeps the current Basic credential in tab session storage and
+  drops it at sign-out. Spring derives the Help identity from its authenticated
+  principal and sends it to FastAPI with a separate internal service credential.
+  Help is enabled for mapped seeded users in the local demo. The standalone
+  Streamlit tool and bank admin portal are still available.
+- Documented the no-API-key Docker Compose walkthrough and added a CI step
+  for the live, authenticated Help endpoint.
+
+## Verification
+
+- Python suite: 63 passed, one opt-in test skipped. The opt-in test passed
+  separately against live seeded CoreBank.
+- Java suite: 19 passed using JDK 21 and H2.
+- Chrome desktop: demo login, review and send a transfer, receipt in Activity,
+  reload, withdrawal, CSV export, ticket, sign-out, and new customer registration.
+- Chrome mobile: demo login and Help, with no horizontal overflow at 390px.
+- The browser used local Spring Boot/H2 and FastAPI/SQLite processes. The
+  Docker Compose/PostgreSQL launch still needs a clean-machine check.
+
+## Pending
+
+After reviewing the branch, publish it to the existing GitHub repository and
+verify the Docker Compose quick start. Extending Help to newly registered
+customers requires replacing the seeded identity map and provisioning support
+records for those identities.
+
+## Manual testing accounts
+
+Use U001 (Rahul), U002 (Amit), and U003 (Neha) as the stable test identities
+across portal, integrated Help, and CoreBank-mode Streamlit. The sign-in picker
+and docs/MANUAL_TESTING.md describe the fixture. Demo credentials and identities
+are fixed, while account numbers are generated per database. An isolated local
+manual-testing instance was seeded with a persistent H2 and SQLite database.
+Live Chrome checks confirmed all three picker identities in Overview and Help
+after signing out and switching. The Python suite and opt-in live test passed.
+
+## Recipient preview
+
+The transfer form looks up a complete recipient number from the signed-in
+customer's active source account and displays a masked name. Review repeats
+the lookup for the current source and recipient and shows the name with the
+amount. Unknown and closed destinations share an unavailable response.
+Verified with 20 Java tests and a Chrome walkthrough on a fresh synthetic
+database. The persistent localhost instance was restarted with its existing
+test accounts and verified to return Neha's masked name without a transfer.
+
+## Local load and failure testing
+
+Tested a separate H2/SQLite instance at the code state of 346fdb2, with
+1,003 customer accounts and 110,009 starting transaction rows. Timed 480
+mixed API requests (50% history, 25% account lists, 15% recipient previews,
+10% transfers). No mixed requests failed. At concurrency 1/10/30, p95 was
+116/146/415 ms and throughput was 8.8/76.5/80.7 requests per second. A separate
+local-mode Help batch at concurrency 10 returned 30/30 answers with p95 232 ms.
+History pagination succeeded through page 401 on an account with 10,100 entries.
+The persistent manual-testing instance was excluded from this run.
+
+A 20-request burst against one ₹5,000 source posted 12 transfers of ₹400,
+returned six conflicts and two validation rejections, and left ₹200. Receiver
+credits summed to ₹4,800. Insufficient funds and same-account transfers were
+rejected, and another customer's history returned 403. Replaying an identical
+₹75 transfer posted twice with two references. A successful customer transfer
+response included the recipient balance and email. Prioritize a minimal transfer
+receipt and durable idempotency, then profile the authentication and request path
+on the production-like PostgreSQL setup. The local test used no external model
+and did not establish production capacity. No application code changed.
+
+## Retry-safe transfers
+
+Customer transfers now acquire source and recipient PostgreSQL row locks in
+account-ID order. An optional `Idempotency-Key` binds the authenticated customer
+to the source, recipient, and amount. When supplied, CoreBank records the
+posted receipt or insufficient-funds decline in the same transaction as its
+balance changes or failed attempt. Requests without a key remain supported.
+Customer receipts now return only the masked recipient name in `toAccount`.
+
+The portal retains one unconfirmed request per customer in tab session
+storage. **Retry transfer** uses the same key and payload after a timeout or
+reload, then refreshes account balances after receiving a receipt.
+
+Verified the Java suite on H2 and PostgreSQL 17.11 (23 passing on each).
+Twenty distinct ₹400 requests against ₹5,000 posted 12 transfers, declined
+eight for insufficient funds, and left ₹200. Twenty requests with the same
+key posted one debit and credit, returned one receipt, and left ₹4,600.
+A rejected instruction stayed rejected after a top-up. A Chrome test dropped
+a successful PostgreSQL-backed response and recovered the original receipt
+after reloading, with one ₹400 movement. This run verified correctness rather
+than repeating the large-data throughput benchmark. The ongoing manual H2
+instance was migrated in place using its existing fixture data.
+
+## Help quality audit
+
+Exercised 11 conversations through the live signed-in Help route on a separate
+synthetic Spring Boot/H2 and FastAPI/SQLite instance using the default local
+router. Balance, recent history, and KYC retrieved the expected CoreBank data.
+An explicit request for another demo customer was blocked. Everyday recipient
+and failed-withdrawal wording and a failing-transaction follow-up got generic
+fallbacks. A valid failed reference copied from history was missed. Asking for
+an update after opening a ticket created a second ticket. The refund follow-up
+returned general policy without resolving the referenced withdrawal.
+
+Recommended first milestone: transaction-scoped Help with an Activity entry
+point, backend-validated transaction selection, focused clarification, and
+confirmed case creation plus an owned case-status read. Add regression scenarios
+before comparing optional model routing. No application behavior changed.
+
+## Transaction Help and tracked cases
+
+Activity now opens Help with a server-validated customer transaction selected.
+Help suggests recent matches for vague payment questions, retains the selection
+through follow-ups, and uses CoreBank’s recorded failure reason. The signed-in
+portal requires explicit case confirmation and links each transaction case to
+its originating reference. Retrying confirmation returns the same case.
+**My cases** and ticket-status questions read the authenticated customer's
+existing cases. The standalone chat preserves its previous ticket behavior.
+
+Verified 67 Python tests at 82% coverage, 23 Java tests, and two live Help
+tests with the PostgreSQL 17.11 support database. The live tests check
+concurrent confirmation and cross-customer access. Chrome at 390 px
+completed Activity → failed withdrawal explanation → case confirmation →
+case lookup after reload. PostgreSQL exposed foreign-key write ordering in
+demo startup and conversation creation. Both were fixed and retested.
+The persistent manual demo was restarted with the existing accounts and data.
+
+## Pre-fix chatbot audit
+
+Audited committed baseline `27f9c89` against a separate synthetic local stack.
+Ran 55 API scenarios across 95 chat turns (30 pass, 12 partial, 13 gaps)
+and six Chrome checks (three pass, three gaps). Replayed the user's wording
+with the same kinds of synthetic transactions. The manual database was untouched.
+
+Confirmed priorities: require a substantive case reason, allow it to be read
+later, invalidate cancelled offers, handle failed-transaction listings without
+treating ordinary words as references, and guide users to statement export.
+Also observed lost context after reload, missing browser Back behavior, and
+no retry button on transport failure. All seven access checks and concurrent
+confirmation deduplication passed. The paused app edits are checkpointed
+outside the checkout. No application fixes were deployed during this audit.
+
+## Help fixes after the audit
+
+Help collects the issue before offering case confirmation, shows the summary,
+reads the saved reason, and invalidates cancelled drafts. Real reference formats
+are separated from ordinary failure language. Failed-transaction requests list
+only failed records, statement and transfer requests point to portal actions,
+and unclear requests ask a focused question. The browser restores the current
+tab's transcript and verified selection, supports Back and Forward, and retries
+the same request after a transport failure.
+
+The isolated retest passed all 55 API scenarios (95 turns) and all six Chrome
+checks, including mobile layout, persistence and successful retry. Java tests
+(23) and Python tests (69, plus three opt-in integration skips) passed.
+The before and after results are saved in the task outputs.

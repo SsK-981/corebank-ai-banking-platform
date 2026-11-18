@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -9,6 +10,10 @@ from pydantic import BaseModel, ConfigDict, Field
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     conversation_id: str | None = Field(default=None, min_length=36, max_length=36)
+    action: (
+        Literal["select_transaction", "clear_transaction", "confirm_case", "list_cases"] | None
+    ) = None
+    transaction_reference: str | None = Field(default=None, min_length=3, max_length=40)
 
 
 class ChatResponse(BaseModel):
@@ -18,6 +23,12 @@ class ChatResponse(BaseModel):
     conversation_id: str
     escalated: bool = False
     sources: list[str] = Field(default_factory=list)
+    selected_transaction: dict | None = None
+    transaction_options: list[dict] = Field(default_factory=list)
+    case_offer: bool = False
+    case_summary: str | None = None
+    next_action: Literal["download_statement", "open_transfer"] | None = None
+    cases: list[dict] = Field(default_factory=list)
 
 
 class TicketCreate(BaseModel):

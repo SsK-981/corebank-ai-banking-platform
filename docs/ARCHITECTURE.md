@@ -9,8 +9,10 @@ demo client and never talks directly to either database.
 
 ## Request lifecycle
 
-1. Streamlit obtains a development JWT or receives an externally issued production JWT.
-2. FastAPI validates the token and resolves the signed-in customer.
+1. The CoreBank customer portal sends Help requests to Spring on the same origin.
+   Spring uses the authenticated customer and supplies the identity and service
+   credential server-side. FastAPI maps that email to a seeded customer ID.
+2. For standalone Streamlit, FastAPI validates a development or externally issued JWT.
 3. The local router handles safety and obvious intents before optional LLM routing.
 4. The orchestrator selects a narrowly scoped tool.
 5. CoreBank authenticates the AI service and independently verifies customer ownership.
@@ -39,3 +41,25 @@ demo client and never talks directly to either database.
   update.
 - High account activity risk: the system recommends manual review and does not
   auto-approve.
+
+## Customer transfer retries
+
+The portal creates one idempotency key when a customer confirms a transfer.
+CoreBank locks the source and destination rows in ascending account-ID order.
+It checks funds under those locks and commits the result in the same transaction
+as the debit and credit or the insufficient-funds attempt. A repeat with the
+same key and transfer details receives that result. Reusing the key with changed
+details returns a conflict. The customer receipt returns a masked recipient
+name, and the portal refreshes the latest balance after receiving the receipt.
+
+The portal keeps one unresolved transfer per customer in the current tab.
+If a response is lost, **Retry transfer** resends its original request. The
+same retry is safe if the first request already committed.
+
+## Transaction Help
+
+Activity can pass a transaction reference to the signed-in support bridge.
+FastAPI looks up the customer’s record and remembers the verified reference
+within that conversation. A case requires an issue description and explicit confirmation. Transaction cases
+link to the selected reference, and a cancelled draft cannot be confirmed. The support database stores the case and its link
+together. Asking for an update reads the customer’s existing cases.

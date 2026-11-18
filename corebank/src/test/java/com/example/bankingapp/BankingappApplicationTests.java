@@ -7,6 +7,7 @@ import com.example.bankingapp.dto.KycUpdateRequest;
 import com.example.bankingapp.dto.RegisterRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
 import com.example.bankingapp.dto.TransferRequest;
+import com.jayway.jsonpath.JsonPath;
 import com.example.bankingapp.exception.AccessDeniedBusinessException;
 import com.example.bankingapp.exception.InsufficientBalanceException;
 import com.example.bankingapp.exception.InvalidTransactionException;
@@ -21,9 +22,14 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Future;
+import java.util.function.IntFunction;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -34,9 +40,11 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -74,6 +82,36 @@ class BankingappApplicationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.holderName").value("API User"))
                 .andExpect(jsonPath("$.ownerEmail").value(email));
+    }
+
+    @Test
+    void transferPreviewOnlyReturnsAMaskedNameForAnEligibleRecipient() throws Exception {
+        String senderEmail = registerCustomer();
+        String recipientEmail = registerCustomer();
+        AccountResponse sender = accountService.createAccount(
+                new CreateAccountRequest("Portal Sender", BigDecimal.ZERO), senderEmail);
+        AccountResponse recipient = accountService.createAccount(
+                new CreateAccountRequest("Neha Patil", BigDecimal.ZERO), recipientEmail);
+        String endpoint = "/customer/accounts/" + sender.accountId() + "/transfer-recipient";
+
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber()))
+                .andExpect(status().isUnauthorized());
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber())
+                        .with(httpBasic(recipientEmail, "password123")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(get(endpoint).param("accountNumber", sender.accountNumber())
+                        .with(httpBasic(senderEmail, "password123")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber())
+                        .with(httpBasic(senderEmail, "password123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedName").value("Neha P•••"))
+                .andExpect(jsonPath("$.length()").value(1));
+
+        accountService.closeAccount(recipient.accountId(), recipientEmail, false);
+        mockMvc.perform(get(endpoint).param("accountNumber", recipient.accountNumber())
+                        .with(httpBasic(senderEmail, "password123")))
+                .andExpect(status().isNotFound());
     }
 
     @Test
@@ -261,6 +299,144 @@ class BankingappApplicationTests {
     }
 
     @Test
+    void concurrentDistinctTransfersUseTheLatestAvailableBalance() throws Exception {
+        String senderEmail = registerCustomer();
+        String receiverEmail = registerCustomer();
+        AccountResponse sender = accountService.createAccount(
+                new CreateAccountRequest("Concurrent Sender", new BigDecimal("5000.00")), senderEmail);
+        AccountResponse receiver = accountService.createAccount(
+                new CreateAccountRequest("Concurrent Recipient", BigDecimal.ZERO), receiverEmail);
+        String body = transferBody(sender, receiver, "400.00");
+
+        List<MvcResult> results = concurrentTransfers(
+                senderEmail, body, index -> UUID.randomUUID().toString());
+
+        assertEquals(12, results.stream().filter(result -> result.getResponse().getStatus() == 200).count());
+        assertEquals(8, results.stream().filter(result -> result.getResponse().getStatus() == 400).count());
+        for (MvcResult result : results) {
+            if (result.getResponse().getStatus() == 400) {
+                String reason = JsonPath.read(result.getResponse().getContentAsString(), "$.messages[0]");
+                assertEquals("Insufficient balance for transfer", reason);
+            }
+        }
+        assertEquals(new BigDecimal("200.00"), accountService.getAccount(sender.accountId(), senderEmail, false).balance());
+        assertEquals(new BigDecimal("4800.00"), accountService.getAccount(receiver.accountId(), receiverEmail, false).balance());
+    }
+
+    @Test
+    void concurrentRetriesReturnTheOriginalReceiptAndPostOnce() throws Exception {
+        String senderEmail = registerCustomer();
+        String receiverEmail = registerCustomer();
+        AccountResponse sender = accountService.createAccount(
+                new CreateAccountRequest("Retry Sender", new BigDecimal("5000.00")), senderEmail);
+        AccountResponse receiver = accountService.createAccount(
+                new CreateAccountRequest("Retry Recipient", BigDecimal.ZERO), receiverEmail);
+        String key = UUID.randomUUID().toString();
+
+        List<MvcResult> results = concurrentTransfers(
+                senderEmail, transferBody(sender, receiver, "400.00"), index -> key);
+
+        String originalReceipt = results.getFirst().getResponse().getContentAsString();
+        for (MvcResult result : results) {
+            assertEquals(200, result.getResponse().getStatus());
+            assertEquals(originalReceipt, result.getResponse().getContentAsString());
+        }
+        assertEquals(1, (int) JsonPath.read(originalReceipt, "$.toAccount.length()"));
+        String name = JsonPath.read(originalReceipt, "$.toAccount.maskedName");
+        assertTrue(name.startsWith("Retry R"));
+        assertEquals(new BigDecimal("4600.00"), accountService.getAccount(sender.accountId(), senderEmail, false).balance());
+        assertEquals(new BigDecimal("400.00"), accountService.getAccount(receiver.accountId(), receiverEmail, false).balance());
+
+        mockMvc.perform(post("/customer/accounts/transfer")
+                        .with(httpBasic(senderEmail, "password123"))
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transferBody(sender, receiver, "401.00")))
+                .andExpect(status().isConflict());
+        assertEquals(new BigDecimal("4600.00"), accountService.getAccount(sender.accountId(), senderEmail, false).balance());
+    }
+
+    @Test
+    void insufficientFundsReplayKeepsTheOriginalDeclineAfterATopUp() throws Exception {
+        String senderEmail = registerCustomer();
+        String receiverEmail = registerCustomer();
+        AccountResponse sender = accountService.createAccount(
+                new CreateAccountRequest("Declined Sender", BigDecimal.ZERO), senderEmail);
+        AccountResponse receiver = accountService.createAccount(
+                new CreateAccountRequest("Declined Recipient", BigDecimal.ZERO), receiverEmail);
+        String key = UUID.randomUUID().toString();
+        String body = transferBody(sender, receiver, "400.00");
+
+        mockMvc.perform(post("/customer/accounts/transfer")
+                        .with(httpBasic(senderEmail, "password123"))
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("Insufficient balance for transfer"));
+
+        accountService.deposit(sender.accountId(), new MoneyRequest(new BigDecimal("500.00")), senderEmail, false);
+
+        mockMvc.perform(post("/customer/accounts/transfer")
+                        .with(httpBasic(senderEmail, "password123"))
+                        .header("Idempotency-Key", key)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("Insufficient balance for transfer"));
+        assertEquals(new BigDecimal("500.00"), accountService.getAccount(sender.accountId(), senderEmail, false).balance());
+        assertEquals(new BigDecimal("0.00"), accountService.getAccount(receiver.accountId(), receiverEmail, false).balance());
+        var history = accountService.getTransactions(sender.accountId(), PageRequest.of(0, 10), senderEmail, false);
+        assertEquals(1, history.stream().filter(row -> row.status() == TransactionStatus.FAILED).count());
+
+        mockMvc.perform(post("/customer/accounts/transfer")
+                        .with(httpBasic(senderEmail, "password123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(transferBody(sender, receiver, "600.00")))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.messages[0]").value("Insufficient balance for transfer"));
+
+    }
+
+    private List<MvcResult> concurrentTransfers(String email, String body, IntFunction<String> getKey)
+            throws Exception {
+        int count = 20;
+        var ready = new CountDownLatch(count);
+        var start = new CountDownLatch(1);
+        var futures = new ArrayList<Future<MvcResult>>(count);
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (int index = 0; index < count; index++) {
+                String key = getKey.apply(index);
+                futures.add(executor.submit(() -> {
+                    ready.countDown();
+                    if (!start.await(10, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("Transfer start timed out");
+                    }
+                    return mockMvc.perform(post("/customer/accounts/transfer")
+                                    .with(httpBasic(email, "password123"))
+                                    .header("Idempotency-Key", key)
+                                    .contentType(MediaType.APPLICATION_JSON)
+                                    .content(body))
+                            .andReturn();
+                }));
+            }
+            assertTrue(ready.await(10, TimeUnit.SECONDS));
+            start.countDown();
+            var results = new ArrayList<MvcResult>(count);
+            for (var future : futures) {
+                results.add(future.get(30, TimeUnit.SECONDS));
+            }
+            return results;
+        }
+    }
+
+    private String transferBody(AccountResponse sender, AccountResponse receiver, String amount) {
+        return """
+                {"fromAccountId":%d,"toAccountNumber":"%s","amount":%s}
+                """.formatted(sender.accountId(), receiver.accountNumber(), amount);
+    }
+
+    @Test
     void transfersMoneyBetweenAccountsById() {
         String senderUser = registerCustomer();
         String receiverUser = registerCustomer();
@@ -362,6 +538,93 @@ class BankingappApplicationTests {
         assertTrue(insight.riskScore() >= 35);
         assertEquals("MEDIUM", insight.riskLevel());
         assertTrue(insight.signals().stream().anyMatch(signal -> signal.code().equals("TRANSFER_VELOCITY")));
+    }
+
+    @Test
+    void customerCannotRenameAccountAndAdminCanCorrectIt() throws Exception {
+        String customer = registerCustomer();
+        String admin = registerAdmin();
+        AccountResponse account = accountService.createAccount(
+                new CreateAccountRequest("Original Name", new BigDecimal("1500.00")), customer);
+
+        mockMvc.perform(put("/customer/accounts/{id}", account.accountId())
+                        .with(httpBasic(customer, "password123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holderName\":\"Changed Name\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals("Original Name",
+                accountService.getAccount(account.accountId(), customer, false).holderName());
+
+        mockMvc.perform(put("/admin/accounts/{id}", account.accountId())
+                        .with(httpBasic(admin, "password123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holderName\":\"Corrected Name\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.holderName").value("Corrected Name"));
+        AccountResponse corrected = accountService.getAccount(account.accountId(), customer, false);
+        assertEquals("Corrected Name", corrected.holderName());
+        assertEquals(account.accountNumber(), corrected.accountNumber());
+        assertEquals(0, account.balance().compareTo(corrected.balance()));
+    }
+
+    @Test
+    void savedRecipientsStayPrivateAndCanBeRemoved() throws Exception {
+        String customer = registerCustomer();
+        String recipientOwner = registerCustomer();
+        AccountResponse source = accountService.createAccount(
+                new CreateAccountRequest("Sender Name", BigDecimal.ZERO), customer);
+        AccountResponse recipient = accountService.createAccount(
+                new CreateAccountRequest("Recipient Name", BigDecimal.ZERO), recipientOwner);
+        String path = "/customer/accounts/{id}/saved-recipients/{number}";
+        String list = "/customer/accounts/saved-recipients";
+
+        mockMvc.perform(put(path, source.accountId(), recipient.accountNumber())
+                        .with(httpBasic(recipientOwner, "password123")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put(path, source.accountId(), source.accountNumber())
+                        .with(httpBasic(customer, "password123")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(put(path, source.accountId(), recipient.accountNumber())
+                        .with(httpBasic(customer, "password123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedName").value("Recipient N•••"))
+                .andExpect(jsonPath("$.balance").doesNotExist());
+
+        mockMvc.perform(get(list).with(httpBasic(recipientOwner, "password123")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(delete(list + "/{number}", recipient.accountNumber())
+                        .with(httpBasic(recipientOwner, "password123")))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get(list).with(httpBasic(customer, "password123")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].accountNumber").value(recipient.accountNumber()));
+        mockMvc.perform(delete(list + "/{number}", recipient.accountNumber())
+                        .with(httpBasic(customer, "password123")))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get(list).with(httpBasic(customer, "password123")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void concurrentRecipientSavesProduceOneEntry() throws Exception {
+        String customer = registerCustomer();
+        AccountResponse source = accountService.createAccount(
+                new CreateAccountRequest("Sender Name", BigDecimal.ZERO), customer);
+        AccountResponse recipient = accountService.createAccount(
+                new CreateAccountRequest("Recipient Name", BigDecimal.ZERO), registerCustomer());
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<?>> saves = new ArrayList<>();
+            for (int i = 0; i < 6; i++) {
+                saves.add(executor.submit(() -> {
+                    start.await();
+                    return accountService.saveRecipient(source.accountId(), recipient.accountNumber(), customer);
+                }));
+            }
+            start.countDown();
+            for (Future<?> save : saves) save.get(10, TimeUnit.SECONDS);
+        }
+        assertEquals(1, accountService.getSavedRecipients(customer).size());
     }
 
     private String registerCustomer() {

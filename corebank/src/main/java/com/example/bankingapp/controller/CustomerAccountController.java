@@ -2,9 +2,12 @@ package com.example.bankingapp.controller;
 
 import com.example.bankingapp.dto.AccountResponse;
 import com.example.bankingapp.dto.CreateAccountRequest;
+import com.example.bankingapp.dto.CustomerTransferResponse;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
+import com.example.bankingapp.dto.SavedRecipientResponse;
 import com.example.bankingapp.dto.TransactionResponse;
+import com.example.bankingapp.dto.TransferRecipientResponse;
 import com.example.bankingapp.dto.TransferRequest;
 import com.example.bankingapp.dto.TransferResponse;
 import com.example.bankingapp.dto.UpdateAccountRequest;
@@ -12,11 +15,14 @@ import com.example.bankingapp.service.AccountService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.CacheControl;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/customer/accounts")
@@ -63,10 +69,40 @@ public class CustomerAccountController {
         return accountService.withdraw(accountId, request, authentication.getName(), false);
     }
 
+    @GetMapping("/{accountId}/transfer-recipient")
+    public ResponseEntity<TransferRecipientResponse> previewTransferRecipient(
+            @PathVariable Long accountId, @RequestParam String accountNumber, Authentication authentication) {
+        return ResponseEntity.ok()
+                .cacheControl(CacheControl.noStore())
+                .body(accountService.previewTransferRecipient(accountId, accountNumber, authentication.getName()));
+    }
+
+    @GetMapping("/saved-recipients")
+    public ResponseEntity<List<SavedRecipientResponse>> getSavedRecipients(Authentication authentication) {
+        return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                .body(accountService.getSavedRecipients(authentication.getName()));
+    }
+
+    @PutMapping("/{sourceAccountId}/saved-recipients/{accountNumber}")
+    public SavedRecipientResponse saveRecipient(@PathVariable Long sourceAccountId,
+                                                @PathVariable String accountNumber,
+                                                Authentication authentication) {
+        return accountService.saveRecipient(sourceAccountId, accountNumber, authentication.getName());
+    }
+
+    @DeleteMapping("/saved-recipients/{accountNumber}")
+    public ResponseEntity<Void> removeSavedRecipient(@PathVariable String accountNumber,
+                                                     Authentication authentication) {
+        accountService.removeSavedRecipient(accountNumber, authentication.getName());
+        return ResponseEntity.noContent().build();
+    }
+
     @PostMapping("/transfer")
-    public TransferResponse transfer(@Valid @RequestBody TransferRequest request,
-                                     Authentication authentication) {
-        return accountService.transfer(request, authentication.getName(), false);
+    public CustomerTransferResponse transfer(@Valid @RequestBody TransferRequest request,
+                                             @RequestHeader(name = "Idempotency-Key", required = false)
+                                             String idempotencyKey,
+                                             Authentication authentication) {
+        return accountService.transferCustomer(request, authentication.getName(), idempotencyKey);
     }
 
     @GetMapping("/{accountId}/transactions")

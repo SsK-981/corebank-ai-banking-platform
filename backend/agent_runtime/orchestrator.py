@@ -30,7 +30,7 @@ class FintechAgent:
 
     def _plan(self, message: str, history: list[dict]) -> AgentPlan:
         local_plan = self.rule_router.route(message, history)
-        if local_plan.intent in {
+        if local_plan.confidence == 1 or local_plan.intent in {
             Intent.SMALL_TALK,
             Intent.PRIVATE_DATA,
             Intent.PROHIBITED_ADVICE,
@@ -45,6 +45,26 @@ class FintechAgent:
         if not provider_plan.user_id and local_plan.user_id:
             updates["user_id"] = local_plan.user_id
         return provider_plan.model_copy(update=updates) if updates else provider_plan
+
+    def _plan_customer_help(self, message: str, history: list[dict]) -> AgentPlan:
+        local_plan = self.rule_router.route(message, history)
+        if local_plan.intent != Intent.GENERAL_SUPPORT:
+            return local_plan
+
+        # The provider sees only the current, redacted message. References and
+        # conversation context stay in the signed-in application.
+        candidate = self.provider.route(message, [])
+        if (
+            candidate is None
+            or candidate.confidence < 0.75
+            or candidate.intent
+            not in {Intent.ACCOUNT_SUMMARY, Intent.TRANSACTION_HISTORY, Intent.KYC}
+            or candidate.user_id
+            or candidate.transaction_id
+            or candidate.escalate
+        ):
+            return local_plan
+        return AgentPlan(intent=candidate.intent, confidence=candidate.confidence)
 
     @staticmethod
     def _authorized(principal: Principal, user_id: str) -> bool:
@@ -74,19 +94,26 @@ class FintechAgent:
         message: str,
         principal: Principal,
         history: list[dict] | None = None,
+        *,
+        allow_ticket_creation: bool = True,
     ) -> dict[str, Any]:
         history = history or []
         cleaned_message = message.strip()
-        plan = self._plan(cleaned_message, history)
+        plan = (
+            self._plan(cleaned_message, history)
+            if allow_ticket_creation
+            else self._plan_customer_help(cleaned_message, history)
+        )
         if plan.intent == Intent.SMALL_TALK:
             response = self._small_talk_response(cleaned_message)
-            response = self._polish_response(
-                message=cleaned_message,
-                plan=plan,
-                response=response,
-                tools_used=[],
-                sources=[],
-            )
+            if allow_ticket_creation:
+                response = self._polish_response(
+                    message=cleaned_message,
+                    plan=plan,
+                    response=response,
+                    tools_used=[],
+                    sources=[],
+                )
             return self._result(response)
         if plan.intent == Intent.PRIVATE_DATA:
             return self._result(
@@ -97,6 +124,12 @@ class FintechAgent:
             return self._result(
                 "I can help with payments, wallets, KYC, risk reviews, and support "
                 "tickets, but I cannot provide investment or legal advice."
+            )
+
+        if plan.intent == Intent.GENERAL_SUPPORT and not allow_ticket_creation:
+            return self._result(
+                "Could you share a little more about what happened? "
+                "For a payment issue, tell me the amount or choose the transaction in Activity."
             )
 
         results: dict[str, Any] = {}
@@ -166,7 +199,7 @@ class FintechAgent:
                 sources.append(results["faq"]["source"])
 
         ticket_id: str | None = None
-        if plan.intent == Intent.COMPLAINT:
+        if plan.intent == Intent.COMPLAINT and allow_ticket_creation:
             user_id = user_id or principal.user_id
             if user_id:
                 risk_level = results.get("risk", {}).get("risk_level")
@@ -179,15 +212,21 @@ class FintechAgent:
                 )
                 tools_used.extend(["summarize_customer_issue", "create_support_ticket"])
                 ticket_id = results["ticket"].get("ticket_id")
+        elif plan.intent == Intent.COMPLAINT:
+            return self._result(
+                "Choose a transaction from Activity or ask me to open a support case. "
+                "I’ll ask you to confirm before creating it."
+            )
 
         response = self._compose(plan, results, transaction_id, user_id)
-        response = self._polish_response(
-            message=cleaned_message,
-            plan=plan,
-            response=response,
-            tools_used=tools_used,
-            sources=sources,
-        )
+        if allow_ticket_creation:
+            response = self._polish_response(
+                message=cleaned_message,
+                plan=plan,
+                response=response,
+                tools_used=tools_used,
+                sources=sources,
+            )
         escalated = bool(ticket_id)
         return self._result(
             response,
@@ -223,11 +262,7 @@ class FintechAgent:
     def _small_talk_response(message: str) -> str:
         lowered = message.lower()
         if any(term in lowered for term in ("thank", "thanks", "okay", "ok", "got it", "gotcha")):
-            return (
-                "Anytime — happy to help. If anything else comes up, send me a "
-                "transaction ID or ask about refunds, KYC, account activity risk, "
-                "wallet issues, or support tickets."
-            )
+            return "Anytime. Let me know if you need anything else."
         if any(term in lowered for term in ("bye", "goodbye")):
             return "Goodbye! If another payment or account issue comes up, I’ll be here to help."
         if any(
@@ -240,25 +275,17 @@ class FintechAgent:
                 "how's it going",
             )
         ):
-            return (
-                "I’m doing well — ready to help with your fintech support questions. "
-                "You can ask me to show your transactions, check a refund, review KYC, "
-                "explain account activity risk, or create a support ticket."
-            )
-        if any(term in lowered for term in ("good morning", "good afternoon", "good evening")):
-            return (
-                "Hello! Hope your day’s going well. I can help with transactions, refunds, "
-                "KYC status, account activity risk, wallet issues, policies, or support tickets."
-            )
+            return "I’m doing well, thank you. How can I help you today?"
+        for greeting in ("Good morning", "Good afternoon", "Good evening"):
+            if greeting.lower() in lowered:
+                return f"{greeting}. How can I help you today?"
         if "are you there" in lowered:
-            return (
-                "Yes, I’m here. Tell me the transaction, refund, KYC, wallet, activity-risk, "
-                "or support issue you want help with."
-            )
+            return "Yes, I’m here. How can I help?"
         if any(
             phrase in lowered
             for phrase in (
                 "what can you do",
+                "what all can you do",
                 "how can you help",
                 "what do you do",
                 "who are you",
@@ -266,16 +293,10 @@ class FintechAgent:
             )
         ):
             return (
-                "I’m your fintech support assistant. I can check transaction status, "
-                "explain failed-payment refunds, review KYC status, summarize activity-risk "
-                "signals, answer approved policy questions, and create support tickets. "
-                "Try: “Check TXN1001” or “Review account activity risk.”"
+                "I can help you find a transaction, check your KYC status, "
+                "or get support with an account issue."
             )
-        return (
-            "Hey! I can help with your fintech support stuff — transactions, refunds, "
-            "KYC, account activity risk, wallet issues, policy timelines, or support tickets. "
-            "You can try something like “Show my transactions” or “Check TXN1002 refund.”"
-        )
+        return "Hello! How can I help you today?"
 
     @staticmethod
     def _format_money(amount: Any) -> str:
@@ -373,7 +394,7 @@ class FintechAgent:
             elif account_summary.get("error"):
                 parts.append(
                     "I couldn’t reach the connected banking system for the account summary. "
-                    "Please make sure the Spring Boot banking app is running."
+                    "Please try again in a moment."
                 )
             else:
                 parts.append(

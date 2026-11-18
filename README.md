@@ -1,196 +1,246 @@
-# AI Banking Support Platform
+# CoreBank
 
-A grounded banking-support assistant that connects a Spring Boot CoreBank service with
-a FastAPI agent, PostgreSQL-backed state, deterministic banking tools, and a Streamlit
-demo UI.
+CoreBank is a demo banking application with a customer portal, a staff console,
+and a support assistant. Customers can manage accounts, send internal transfers,
+and get help with a specific transaction. Staff can review accounts and update
+identity verification (KYC) records. The demo runs locally with synthetic data.
 
-This is a production-oriented portfolio implementation using synthetic banking data.
-The LLM can help classify and phrase requests, but it cannot directly read databases,
-modify balances, or rewrite financial facts returned by CoreBank.
+![CoreBank customer overview with the account balance, recent activity, and transfer controls](docs/screenshots/demo-overview.png)
 
-## Screenshots
+[Run locally](#run-locally) · [Demo accounts](#demo-accounts) ·
+[Architecture](#architecture) · [Development and tests](#development-and-tests)
 
-The chatbot answers from live CoreBank transaction history, including failed attempts.
+## Features
 
-![Grounded transaction history](docs/screenshots/chatbot-corebank-history.png)
+| Surface | Capabilities |
+| --- | --- |
+| Customer portal | View balances and transaction history, withdraw demo funds, and download CSV statements. |
+| Transfers | Verify the recipient’s masked name, save or remove recipients, review a transfer, and find both sides of the posted transaction in Activity. |
+| Customer support | Open Help from a transaction to see its recorded status, review a support case before opening it, and track cases in chat. |
+| Bank operations | Search accounts, update KYC, credit balances, correct account holder names, close eligible accounts, and export CSV records. |
+| Support playground | Explore the assistant and view support tickets, activity-risk records, and audit events in Streamlit. |
 
-CoreBank separates the customer portal from the operations console.
+## Product walkthrough
 
-![CoreBank portal](docs/screenshots/corebank-portal.png)
+All screenshots were captured in a fresh local demo with synthetic accounts.
 
-Operations staff can review customers, accounts, KYC state, and account activity
-risk signals.
+### Verify and save a recipient
 
-![CoreBank KYC operations](docs/screenshots/corebank-admin-kyc.png)
+Copy Rahul’s account number from his Overview, then sign in as Neha. In
+**Transfer**, enter the number and verify the masked name. Select **Save
+recipient** to add the account to your **Saved recipients** list. On a later
+transfer, choosing that recipient fills in the account number and runs
+verification again.
+
+![Transfer form with Rahul selected from saved recipients and the verified recipient card visible](docs/screenshots/demo-saved-recipient.png)
+
+### Review and confirm a transfer
+
+Enter ₹500 and select **Review transfer**. Check the sender, recipient, and
+amount before confirming.
+
+![Review transfer dialog showing the sender, masked recipient name, and amount before confirmation](docs/screenshots/demo-transfer-review.png)
+
+CoreBank displays a receipt reference once the transfer posts. The outgoing
+entry in **Activity** appends `S` to that reference, and the incoming entry
+appends `R`.
+
+![Activity showing the posted outgoing transfer and its reference](docs/screenshots/demo-transfer-activity.png)
+
+### Get help with a failed transaction
+
+Sign in as Amit. In **Activity**, find the failed withdrawal and select
+**Get help**. The assistant explains the recorded decline and whether the
+account was debited. Use **Clear** to deselect the transaction.
+
+![CoreBank Help explaining that the selected withdrawal failed for insufficient balance and was not debited](docs/screenshots/demo-help-transaction.png)
+
+Select **Open a support case**, describe the issue, and confirm the summary.
+Open **My cases** to see the case status and select **View case** for details.
+A failed transaction that already has a linked case shows the existing case.
+
+![CoreBank Help showing an open support case linked to the failed withdrawal](docs/screenshots/demo-help-cases.png)
+
+### Review accounts in the staff console
+
+Sign in as the demo administrator. The console shows account totals, customer
+KYC statuses, and account search. From an account record, staff can manage the
+balance, correct the account holder name, and export a statement.
+
+![Bank Operations showing the account summary, customer KYC controls, and account search](docs/screenshots/demo-bank-operations.png)
+
+## Run locally
+
+Install Docker Desktop or Docker Engine with the Compose plugin. From a terminal:
+
+```bash
+git clone https://github.com/SsK-981/fintech-ai-agent-chatbot.git
+cd fintech-ai-agent-chatbot
+docker compose up --build
+```
+
+Compose starts both PostgreSQL databases, applies migrations, seeds synthetic
+records, and starts the portal, support API, and playground. The default demo
+runs without an API key or a local `.env` file. If sign-in fails while the
+services are starting, check that the seeding service completed:
+
+```bash
+docker compose ps -a
+docker compose logs corebank-seed
+```
+
+| Surface | URL |
+| --- | --- |
+| Customer portal | [localhost:8080](http://localhost:8080) |
+| Bank operations | [localhost:8080/admin.html](http://localhost:8080/admin.html) |
+| Streamlit playground | [localhost:8501](http://localhost:8501) |
+| FastAPI reference | [localhost:8000/docs](http://localhost:8000/docs) |
+| CoreBank API reference | [localhost:8080/swagger-ui.html](http://localhost:8080/swagger-ui.html) |
+
+Use `docker compose down` to stop the stack while keeping the local database
+volumes. The demo credentials below are for the synthetic local environment.
+
+## Demo accounts
+
+Select a customer on the sign-in page and click **Try demo account**. For
+manual sign-in, the default password for these demo identities is `password123`.
+
+| Identity | Email | Suggested walkthrough |
+| --- | --- | --- |
+| Amit Verma | `amit@example.com` | Failed withdrawal, case creation, and KYC status |
+| Rahul Sharma | `rahul@example.com` | Receive an internal transfer and check the incoming transaction |
+| Neha Patil | `neha@example.com` | Send an internal transfer and verify the receipt |
+| Demo administrator | `demo.admin@corebank.local` | Review accounts, update KYC, and check staff controls |
+
+Account numbers and transaction references are generated for each database.
+The signed-in Help demo supports the three seeded customers. See the
+[full walkthrough](docs/DEMO.md) and [manual testing guide](docs/MANUAL_TESTING.md).
+
+## Example Help requests
+
+| Ask Help | What happens |
+| --- | --- |
+| “Could you move ₹500 to Neha?” | Help offers **Go to Transfer**. You review and confirm the transfer there. |
+| “Neha didn’t get the money I sent.” | Help offers recent transfers to check. |
+| Select **Get help** on a failed withdrawal | Help explains the recorded reason and whether the amount was debited. |
+| “They charged me twice.” | Help offers a support-case draft for you to review. |
+| “What are my active cases?” | Help lists your open cases. |
+| “Can I get a copy of my statement?” | Help points you to the CSV download. |
+| Select **My cases**, then **View case** | Help displays the current status and details of the selected case. |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    C["Customer"] --> UI["Streamlit UI"]
-    UI -->|"JWT"| AI["FastAPI agent"]
-    AI --> R["Intent router"]
-    R -. "optional" .-> LLM["OpenAI-compatible LLM"]
-    R --> T["Approved tools"]
-    T -->|"service token"| CB["Spring Boot CoreBank"]
-    T --> FAQ["Approved policies"]
-    T --> ADB["Agent database"]
-    CB --> CDB["CoreBank database"]
+    Portal["Customer and staff portals"] --> Bank["Spring Boot CoreBank"]
+    Bank --> BankDB["CoreBank PostgreSQL"]
+    Bank -->|"Signed-in Help context"| Agent["FastAPI support service"]
+    Playground["Streamlit playground"] -->|"JWT"| Agent
+    Agent --> State["Support PostgreSQL"]
+    Agent -->|"Scoped banking tools"| Bank
+    Agent -. "Optional intent classification" .-> Model["Ollama or compatible API"]
 ```
 
-CoreBank is the system of record for customer identity, KYC, accounts, balances,
-transactions, failed transaction attempts, and account activity risk. The agent owns
-conversations, support tickets, approved policies, and audit events.
+CoreBank owns accounts, identity and KYC, balances, and transaction records.
+FastAPI owns conversations, case records, approved policy responses, and audit
+events. The portal supplies the authenticated customer identity to Help.
+Banking tools retrieve records scoped to that customer.
 
-More detail: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- **Transfer retries.** Transfers lock both accounts in account-ID order and
+  post the debit and credit together. If the response is lost, the portal
+  reuses its idempotency key to recover the saved outcome.
+- **Saved recipients.** CoreBank stores each list under the customer’s
+  signed-in identity. A database constraint prevents duplicate entries.
+- **One case per linked transaction.** A database uniqueness constraint
+  protects the transaction-to-case link when confirmation is repeated or sent
+  from separate conversations.
+- **Customer and staff permissions.** CoreBank authenticates the portal
+  session. The support service checks its internal credential and uses
+  customer-scoped tools. Staff-only changes, such as name corrections, are
+  enforced by the server.
 
-## Engineering guarantees
+See the [architecture notes](docs/ARCHITECTURE.md),
+[Help rulebook](docs/HELP_RULEBOOK.md), and [threat model](docs/THREAT_MODEL.md).
 
-- **Grounded financial responses:** account facts are fetched through CoreBank tools
-  and rendered with deterministic templates.
-- **Customer-scoped access:** FastAPI validates JWTs, and CoreBank rechecks ownership
-  before returning account data to the AI service.
-- **Banking integrity controls:** money uses decimal types, transfers are transactional,
-  failed attempts are persisted, and optimistic locking prevents silent balance loss.
+## Optional local model
 
-## Tech stack
+The default backend uses rules. Signed-in Help can use an optional model for
+unfamiliar balance, transaction-history, or KYC questions. CoreBank validates
+the suggested intent, retrieves records using the signed-in identity, and
+writes the reply. The support workflow handles transaction selection and case
+confirmation.
 
-| Area | Stack |
-|---|---|
-| Core banking | Java 21, Spring Boot, Spring Security, JPA, Flyway |
-| Agent API | Python 3.12, FastAPI, Pydantic, SQLAlchemy, Alembic |
-| UI | Streamlit |
-| Data | PostgreSQL in Docker Compose; local SQLite/H2 demo modes |
-| Quality | Pytest, JUnit, Ruff, mypy, GitHub Actions |
-
-## Quick start
-
-Requirements:
-
-- Docker Desktop with Compose
-- Or Python 3.12 and JDK 21 for direct local development
-
-Run the full stack:
+To try Ollama, pull the model and set the following values in a local `.env`.
+These values target an Ollama instance running on the host with Docker Desktop.
 
 ```bash
-cp .env.example .env
-docker compose up --build
+ollama pull qwen3:4b-instruct
 ```
-
-On Windows PowerShell:
-
-```powershell
-Copy-Item .env.example .env
-docker compose up --build
-```
-
-Open:
-
-- Chatbot UI: <http://127.0.0.1:8501>
-- CoreBank portal: <http://127.0.0.1:8080>
-- FastAPI docs: <http://127.0.0.1:8000/docs>
-- CoreBank API docs: <http://127.0.0.1:8080/swagger-ui.html>
-
-The Compose stack starts two PostgreSQL databases, CoreBank, demo seeding, FastAPI,
-Alembic migrations, and Streamlit.
-
-## Example requests
-
-Select demo customer `U002` in the chatbot and ask:
-
-1. `What is my account balance?`
-2. `Show my transactions.`
-3. `Why did my failed withdrawal fail?`
-4. `What is my KYC status?`
-5. `Review account activity risk.`
-6. `Open a support case for the failed payment.`
-7. `Show me U001's account balance.`
-
-The final request should be denied because it asks for another customer's record.
-
-Demo script: [docs/DEMO.md](docs/DEMO.md)
-
-## LLM modes
-
-The application runs without an external model through its deterministic router.
-
-OpenAI-compatible providers can be enabled for intent routing and tone:
 
 ```dotenv
-LLM_PROVIDER=deepseek
-LLM_MODEL=deepseek-v4-flash
-LLM_API_KEY=your-key
-LLM_BASE_URL=https://api.deepseek.com
-LLM_POLISH_RESPONSES=true
+LLM_PROVIDER=ollama
+LLM_MODEL=qwen3:4b-instruct
+LLM_BASE_URL=http://host.docker.internal:11434/v1
 ```
 
-Provider failures, invalid structured output, and malformed responses fall back to
-local routing. Financial facts still bypass model polishing.
+Run `docker compose up -d backend` after changing the settings. When running
+FastAPI directly on the same host as Ollama, use
+`http://127.0.0.1:11434/v1`. See [.env.example](.env.example) for provider
+settings. On Docker Engine without Docker Desktop, the endpoint must be
+reachable from the backend container.
 
-## Verification
+## Development and tests
 
-Python checks:
+The stack uses **Java 21, Spring Boot, Spring Security, JPA, and Flyway** for
+banking, and **Python 3.12, FastAPI, SQLAlchemy, Alembic, and Streamlit** for
+support. Docker Compose uses PostgreSQL for both services.
 
-```powershell
+```bash
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-dev.lock
+python -m pip install -e . --no-deps
 python -m ruff check backend frontend tests scripts run_app.py
 python -m ruff format --check backend frontend tests scripts run_app.py
 python -m mypy backend
 python -m pytest
+(cd corebank && sh ./mvnw test)
 ```
 
-CoreBank checks:
+On Windows, activate the environment with `.venv\Scripts\Activate.ps1`. Change
+into `corebank` before running `.\mvnw.cmd test`.
 
-```powershell
-cd corebank
-.\mvnw.cmd test
+The Python suite runs unit and API tests by default. On a freshly seeded
+disposable demo stack, enable the two live integration suites:
+
+```bash
+RUN_LIVE_COREBANK_TESTS=1 RUN_LIVE_PORTAL_HELP_TESTS=1 \
+  COREBANK_BASE_URL=http://127.0.0.1:8080 \
+  COREBANK_PORTAL_URL=http://127.0.0.1:8080 \
+  python -m pytest tests/integration
 ```
 
-Current automated coverage in the repository:
+These tests create synthetic failed transactions and support cases. GitHub
+Actions also runs lint, type, migration, Java, and image build checks.
 
-- 60 Python unit/API tests
-- 19 Spring Boot integration tests
-- 1 live chatbot-to-CoreBank contract test
-- Alembic and Flyway migration checks in CI
-- Docker builds for backend, frontend, and CoreBank images
+| Path | Contents |
+| --- | --- |
+| `corebank/` | Banking API, customer portal, staff console, and Java tests |
+| `backend/` | Help workflows, intent routing, banking tools, and case storage |
+| `frontend/` | Standalone Streamlit playground |
+| `alembic/` | Support database migrations |
+| `tests/` | Python unit, API, and live integration tests |
+| `docs/` | Demo, testing, architecture, and security documentation |
+| `compose.yaml` | Local stack definition |
 
-## Security boundaries
+## Project scope
 
-- Local demo credentials are only for synthetic data.
-- Production mode rejects demo seeding and disabled authentication.
-- The AI service uses a service credential, not customer banking passwords.
-- Messages are redacted before optional LLM routing.
-- Conversation access is owner-scoped and privileged actions are audited.
-- A portfolio project is not a licensed bank, compliance program, or validated fraud
-  model.
+CoreBank uses synthetic data and models internal account transfers and
+simulated withdrawals. The portal does not connect to payment networks. Its
+activity-risk labels come from rules and are intended for demonstration.
+Integrated Help is mapped to the three seeded identities. The staff console
+handles banking operations, and the Streamlit operations view can list support
+cases without changing their status. See [SECURITY.md](SECURITY.md) for the
+supported security boundaries.
 
-Security notes: [SECURITY.md](SECURITY.md)
-Threat model: [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)
-
-## Known limitations
-
-- Demo identity selection still uses fixed local users.
-- Account activity risk is rule-based and should not be described as fraud detection.
-- PostgreSQL-backed concurrency tests should be expanded beyond the current local test
-  coverage.
-- Money movement still needs explicit idempotency keys and ledger-style postings before
-  it can model retry-safe banking transfers.
-- A reproducible agent evaluation dataset should be added for intent accuracy, tool
-  selection, refusal behavior, and provider-failure recovery.
-
-## Repository layout
-
-```text
-corebank/       Spring Boot banking system of record
-backend/        FastAPI agent, tools, security, persistence
-frontend/       Streamlit demo UI
-alembic/        Agent database migrations
-scripts/        CoreBank demo seeding
-tests/          Python API, unit, and live integration tests
-docs/           Architecture, demo, and threat-model notes
-compose.yaml    Complete local stack
-run_app.py      Local launcher for direct development
-```
-
-## License
-
-MIT - see [LICENSE](LICENSE).
+Released under the [MIT License](LICENSE).

@@ -43,6 +43,7 @@ class Settings:
     llm_timeout_seconds: float
     llm_polish_responses: bool
     seed_demo_data: bool
+    support_service_token: str = "local-support-service-token-change-me"
 
     @property
     def is_production(self) -> bool:
@@ -62,6 +63,8 @@ class Settings:
             raise RuntimeError("BANKING_DATA_SOURCE must be local or corebank")
         if self.banking_data_source == "corebank" and len(self.corebank_service_token) < 32:
             raise RuntimeError("COREBANK_SERVICE_TOKEN must contain at least 32 characters")
+        if len(self.support_service_token) < 32:
+            raise RuntimeError("SUPPORT_SERVICE_TOKEN must contain at least 32 characters")
 
     def corebank_email_for(self, user_id: str | None) -> str | None:
         if not user_id:
@@ -92,6 +95,9 @@ def get_settings() -> Settings:
         corebank_fallback_to_local=_as_bool(os.getenv("COREBANK_FALLBACK_TO_LOCAL"), default=True),
         corebank_service_token=os.getenv(
             "COREBANK_SERVICE_TOKEN", "local-corebank-service-token-change-me"
+        ),
+        support_service_token=os.getenv(
+            "SUPPORT_SERVICE_TOKEN", "local-support-service-token-change-me"
         ),
         corebank_customer_emails={
             user_id: email
