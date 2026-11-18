@@ -43,6 +43,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -536,6 +537,33 @@ class BankingappApplicationTests {
         assertTrue(insight.riskScore() >= 35);
         assertEquals("MEDIUM", insight.riskLevel());
         assertTrue(insight.signals().stream().anyMatch(signal -> signal.code().equals("TRANSFER_VELOCITY")));
+    }
+
+    @Test
+    void customerCannotRenameAccountAndAdminCanCorrectIt() throws Exception {
+        String customer = registerCustomer();
+        String admin = registerAdmin();
+        AccountResponse account = accountService.createAccount(
+                new CreateAccountRequest("Original Name", new BigDecimal("1500.00")), customer);
+
+        mockMvc.perform(put("/customer/accounts/{id}", account.accountId())
+                        .with(httpBasic(customer, "password123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holderName\":\"Changed Name\"}"))
+                .andExpect(status().isForbidden());
+        assertEquals("Original Name",
+                accountService.getAccount(account.accountId(), customer, false).holderName());
+
+        mockMvc.perform(put("/admin/accounts/{id}", account.accountId())
+                        .with(httpBasic(admin, "password123"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"holderName\":\"Corrected Name\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.holderName").value("Corrected Name"));
+        AccountResponse corrected = accountService.getAccount(account.accountId(), customer, false);
+        assertEquals("Corrected Name", corrected.holderName());
+        assertEquals(account.accountNumber(), corrected.accountNumber());
+        assertEquals(0, account.balance().compareTo(corrected.balance()));
     }
 
     private String registerCustomer() {

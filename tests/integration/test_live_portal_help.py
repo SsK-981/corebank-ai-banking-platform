@@ -119,3 +119,45 @@ def test_transaction_help_keeps_context_and_confirms_one_case():
         transaction_reference=reference,
     )
     assert unowned["selected_transaction"] is None
+
+
+def test_separate_conversations_share_one_case_for_a_failed_transaction():
+    # Create a distinct synthetic failure so this test can run after earlier cases.
+    account = requests.get(f"{PORTAL_URL}/customer/accounts", auth=AMIT_AUTH, timeout=10).json()[
+        "content"
+    ][0]
+    rejected = requests.post(
+        f"{PORTAL_URL}/customer/accounts/{account['accountId']}/withdraw",
+        auth=AMIT_AUTH,
+        json={"amount": "9999999.00"},
+        timeout=10,
+    )
+    assert rejected.status_code == 400
+    reference = failed_withdrawal_reference()
+    drafts = []
+    for _ in range(6):
+        selected = chat("Get help", action="select_transaction", transaction_reference=reference)
+        context = {"conversation_id": selected["conversation_id"]}
+        offered = chat("Open a support case because my withdrawal failed this morning", **context)
+        assert offered["case_offer"]
+        drafts.append(context)
+
+    def confirm(context):
+        return chat("Confirm", action="confirm_case", **context)
+
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        results = list(pool.map(confirm, drafts))
+    case_ids = {reply["ticket_id"] for reply in results}
+    assert len(case_ids) == 1 and None not in case_ids
+    ticket_id = case_ids.pop()
+
+    for _ in range(3):
+        selected = chat("Get help", action="select_transaction", transaction_reference=reference)
+        reply = chat("Raise another ticket for this", conversation_id=selected["conversation_id"])
+        assert reply["ticket_id"] == ticket_id
+        assert "already has a support case" in reply["response"]
+        assert not reply["case_offer"]
+
+    cases = chat("what are my active case")["cases"]
+    assert sum(case["transaction_reference"] == reference for case in cases) == 1
+    print(f"Six parallel confirmations and three later requests reused {ticket_id}")

@@ -11,7 +11,6 @@ document.addEventListener('DOMContentLoaded', () => {
   let accounts = [];
   let currentAccount = null;
   let conversationId = null;
-  let selectedHelpTransaction = null;
   let selectedHelpCard = null;
   let helpTranscript = [];
   let helpCaseOffer = false;
@@ -209,7 +208,6 @@ document.addEventListener('DOMContentLoaded', () => {
     currentAccount = null;
     accounts = [];
     conversationId = null;
-    selectedHelpTransaction = null;
     selectedHelpCard = null;
     helpTranscript = [];
     lastFailedHelpRequest = null;
@@ -249,7 +247,6 @@ document.addEventListener('DOMContentLoaded', () => {
     $('help-cases').replaceChildren();
     $('help-cases').classList.add('hidden');
     $('help-case-offer').classList.add('hidden');
-    $('request-help-case').classList.add('hidden');
     setSupportBusy(false);
     addBubble('assistant', 'Hello! How can I help you today?');
     $('chat-input').value = '';
@@ -507,6 +504,10 @@ document.addEventListener('DOMContentLoaded', () => {
     else if (!location.hash) history.replaceState({ page }, '', `#${page}`);
     renderPage(page);
   }
+  function scrollHelpThread() {
+    const thread = $('chat-thread');
+    thread.scrollTop = thread.scrollHeight;
+  }
   function addBubble(role, text) {
     const bubble = appendText(
       $('chat-messages'),
@@ -514,7 +515,7 @@ document.addEventListener('DOMContentLoaded', () => {
       text,
       `chat-bubble ${role}`,
     );
-    bubble.scrollIntoView({ block: 'nearest' });
+    scrollHelpThread();
     return bubble;
   }
   function supportError(error) {
@@ -574,13 +575,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showHelpTransaction(transaction) {
     selectedHelpCard = transaction?.reference ? transaction : null;
-    selectedHelpTransaction = selectedHelpCard?.reference || null;
-    $('request-help-case').classList.toggle('hidden', !selectedHelpTransaction);
     const panel = $('help-transaction-context');
     panel.replaceChildren();
     panel.classList.toggle('hidden', !selectedHelpCard);
     if (!selectedHelpCard) return;
-    appendText(panel, 'strong', 'Selected transaction');
+    const header = appendText(panel, 'div', '', 'help-context-heading');
+    appendText(header, 'strong', 'Selected transaction');
+    const clear = appendText(header, 'button', 'Clear', 'quiet-button help-clear-transaction');
+    clear.type = 'button';
+    clear.setAttribute('aria-label', 'Clear selected transaction');
+    clear.addEventListener('click', () =>
+      sendSupport('Clear selected transaction', 'clear_transaction'),
+    );
     appendText(panel, 'span', helpTransactionDetails(selectedHelpCard));
   }
   function helpLabel(value) {
@@ -634,7 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     panel.classList.remove('hidden');
   }
-  function renderHelpCases(cases = []) {
+  function renderHelpCases(cases = [], showDetails = false) {
     const panel = $('help-cases');
     panel.replaceChildren();
     appendText(panel, 'strong', 'My support cases');
@@ -650,6 +656,11 @@ document.addEventListener('DOMContentLoaded', () => {
       );
       const summary = item.case_summary || item.summary;
       if (summary) appendText(card, 'p', summary, 'help-case-summary');
+      if (showDetails && item.ticket_id) {
+        const button = appendText(card, 'button', 'View case', 'quiet-button help-case-detail');
+        button.type = 'button';
+        button.addEventListener('click', () => sendSupport(`Show case ${item.ticket_id}`));
+      }
     });
     panel.classList.remove('hidden');
   }
@@ -658,7 +669,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document
       .querySelectorAll(
         '#chat-form input, #chat-form button, [data-help-message], [data-help-action], ' +
-          '#request-help-case, .help-option, .activity-help',
+          '#request-help-case, .help-option, .help-case-detail, .activity-help, .help-clear-transaction',
       )
       .forEach((control) => {
         control.disabled = busy;
@@ -702,17 +713,22 @@ document.addEventListener('DOMContentLoaded', () => {
         renderHelpMessage({ kind: 'summary', text: result.case_summary });
       if (result.next_action)
         renderHelpMessage({ kind: 'action', action: result.next_action });
-      if (result.selected_transaction || action === 'select_transaction') {
+      if (
+        result.selected_transaction ||
+        result.case_offer ||
+        ['select_transaction', 'clear_transaction'].includes(action)
+      ) {
         showHelpTransaction(result.selected_transaction);
       }
       renderHelpOptions(result.transaction_options || []);
       if (action === 'list_cases' || result.cases?.length)
-        renderHelpCases(result.cases || []);
+        renderHelpCases(result.cases || [], !/\bTCK-[A-Z0-9]+\b/i.test(text));
       else $('help-cases').classList.add('hidden');
       helpCaseOffer = Boolean(result.case_offer);
       $('help-case-offer').classList.toggle('hidden', !helpCaseOffer);
       const tools = (result.tools_used || []).join(', ');
       if (tools) renderHelpMessage({ kind: 'tools', text: tools });
+      scrollHelpThread();
       saveHelpState();
     } catch (error) {
       waiting.remove();
@@ -764,7 +780,6 @@ document.addEventListener('DOMContentLoaded', () => {
     sendSupport(
       'Please open the support case.',
       'confirm_case',
-      selectedHelpTransaction,
     ).finally(() => {
       $('confirm-help-case').disabled = false;
     });
@@ -919,28 +934,6 @@ document.addEventListener('DOMContentLoaded', () => {
       (a) => String(a.accountId) === $('activity-account').value,
     );
     if (account) selectAccount(account);
-  });
-  $('rename-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!currentAccount)
-      return message('account-action-result', 'No account is selected.', false);
-    try {
-      const updated = await request(
-        `/customer/accounts/${currentAccount.accountId}`,
-        {
-          method: 'PUT',
-          body: JSON.stringify({ holderName: $('rename-holder').value.trim() }),
-        },
-      );
-      accounts = accounts.map((a) =>
-        a.accountId === updated.accountId ? updated : a,
-      );
-      currentAccount = updated;
-      renderAccounts();
-      message('account-action-result', 'Account holder name updated.');
-    } catch (error) {
-      message('account-action-result', error.message, false);
-    }
   });
   $('download-statement').addEventListener('click', async () => {
     if (!currentAccount)

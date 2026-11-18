@@ -153,7 +153,10 @@ def _chat_impl(
             )
         if result is None:
             result = agent.process_message(
-                payload.message, principal, history, allow_ticket_creation=not integrated
+                payload.message,
+                principal,
+                [] if persisted_help_context.get("transaction_selection_cleared") else history,
+                allow_ticket_creation=not integrated,
             )
         # The conversation must exist before inserting its messages on PostgreSQL.
         db.flush()

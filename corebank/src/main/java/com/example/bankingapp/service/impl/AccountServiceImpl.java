@@ -150,6 +150,10 @@ public class AccountServiceImpl implements AccountService {
 
         BankAccount account = findAccount(accountId);
         ensureOwnerOrAdmin(account, username, admin);
+        if (!admin) {
+            throw new AccessDeniedBusinessException(
+                    "Account holder names can only be corrected by a bank administrator");
+        }
         account.setHolderName(request.holderName().trim());
         return BankingMapper.toAccountResponse(bankAccountRepository.save(account));
     }

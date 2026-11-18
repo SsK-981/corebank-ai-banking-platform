@@ -248,15 +248,14 @@
               <div class="card-heading">
                 <div><h3>Manage selected account</h3></div>
               </div>
-              <form id="rename-form" class="rename-form">
-                <label for="rename-holder">Account holder name</label
-                ><input id="rename-holder" type="text" required /><button
-                  class="quiet-button"
-                  type="submit"
-                >
-                  Save changes
-                </button>
-              </form>
+              <div class="rename-form">
+                <label for="rename-holder">Account holder name</label>
+                <input id="rename-holder" type="text" readonly
+                       aria-describedby="holder-name-guidance" />
+                <p id="holder-name-guidance" class="subtle">
+                  Contact support if your account holder name needs a correction.
+                </p>
+              </div>
               <form id="withdraw-form" class="rename-form">
                 <label for="withdraw-amount">Withdrawal amount</label
                 ><input
@@ -385,16 +384,14 @@
                 </p>
               </div>
             </div>
-            <div class="help-tools">
-              <div
-                id="help-transaction-context"
-                class="help-context hidden"
-                aria-live="polite"
-              ></div>
-              <div
-                id="help-transaction-options"
-                class="help-options hidden"
-              ></div>
+            <div class="surface-card support-card">
+              <div class="support-header">
+                <span class="support-avatar">C</span>
+                <div>
+                  <strong>CoreBank support</strong
+                  ><small><span class="online-dot"></span> Customer help</small>
+                </div>
+              </div>
               <div class="help-actions" aria-label="Help shortcuts">
                 <button
                   type="button"
@@ -413,7 +410,7 @@
                 <button
                   id="request-help-case"
                   type="button"
-                  class="quiet-button hidden"
+                  class="quiet-button"
                 >
                   Open a support case
                 </button>
@@ -425,25 +422,25 @@
                   My cases
                 </button>
               </div>
-              <div id="help-cases" class="help-cases hidden"></div>
-            </div>
-            <div class="surface-card support-card">
-              <div class="support-header">
-                <span class="support-avatar">C</span>
-                <div>
-                  <strong>CoreBank support</strong
-                  ><small><span class="online-dot"></span> Customer help</small>
-                </div>
-              </div>
               <div
-                id="chat-messages"
-                class="chat-messages"
-                role="log"
+                id="help-transaction-context"
+                class="help-context hidden"
                 aria-live="polite"
-              >
-                <div class="chat-bubble assistant">
-                  Hello! How can I help you today?
+              ></div>
+              <div id="chat-thread" class="chat-thread">
+                <div
+                  id="chat-messages"
+                  class="chat-messages"
+                  role="log"
+                  aria-live="polite"
+                >
+                  <div class="chat-bubble assistant">Hello! How can I help you today?</div>
                 </div>
+                <div
+                  id="help-transaction-options"
+                  class="help-options hidden"
+                ></div>
+                <div id="help-cases" class="help-cases hidden"></div>
               </div>
               <p id="chat-error" class="inline-error hidden" role="alert"></p>
               <div id="chat-retry" class="chat-retry hidden">

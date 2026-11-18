@@ -10,7 +10,9 @@ from pydantic import BaseModel, ConfigDict, Field
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1, max_length=2000)
     conversation_id: str | None = Field(default=None, min_length=36, max_length=36)
-    action: Literal["select_transaction", "confirm_case", "list_cases"] | None = None
+    action: (
+        Literal["select_transaction", "clear_transaction", "confirm_case", "list_cases"] | None
+    ) = None
     transaction_reference: str | None = Field(default=None, min_length=3, max_length=40)
 
 

@@ -9,6 +9,11 @@ from backend.agent_runtime.plan import AgentPlan, Intent
 TRANSACTION_PATTERN = re.compile(r"\bTXN[A-Z0-9]+\b", re.IGNORECASE)
 USER_PATTERN = re.compile(r"\bU\d+\b", re.IGNORECASE)
 WORD_PATTERN = re.compile(r"[a-z0-9]+")
+WALLET_BALANCE_PATTERN = re.compile(
+    r"\bmy wallet balance\b|"
+    r"\bmy wallet\b.*\b(?:how much|what amount|what balance)\b.*\b(?:spend|left|available)\b|"
+    r"\b(?:how much|what amount)\b.*\b(?:left|available|spend)\b.*\bmy wallet\b"
+)
 
 
 class RuleRouter:
@@ -125,17 +130,28 @@ class RuleRouter:
             "get it back",
             "wallet debit",
         )
-        kyc_words = ("kyc", "verification", "verify customer", "identity check")
+        kyc_words = (
+            "kyc",
+            "verification",
+            "verify customer",
+            "identity check",
+            "identity verified",
+        )
         risk_words = ("risk", "fraud", "fraudulent", "suspicious", "safe transaction")
         account_summary_phrases = (
             "account balance",
             "how much money do i have",
+            "how much is in my account",
+            "how much is left",
+            "how much do i have left",
+            "how much have i got",
+            "how much money have i got",
+            "how much money is left",
             "my balance",
             "available balance",
             "account summary",
             "account overview",
-            "my account",
-            "account details",
+            "show my account details",
             "customer profile",
             "my profile",
         )
@@ -148,6 +164,10 @@ class RuleRouter:
             "my payments",
             "all payments",
             "recent payments",
+            "recent activity",
+            "latest payments",
+            "what did i pay",
+            "what have i paid",
         )
         transaction_lookup_words = {
             "check",
@@ -203,9 +223,15 @@ class RuleRouter:
                 needs_clarification=not bool(transaction_id),
                 confidence=0.95,
             )
-        if not transaction_id and any(phrase in lowered for phrase in account_summary_phrases):
+        if not TRANSACTION_PATTERN.search(message) and WALLET_BALANCE_PATTERN.search(lowered):
+            return AgentPlan(intent=Intent.ACCOUNT_SUMMARY, user_id=user_id, confidence=1)
+        if not TRANSACTION_PATTERN.search(message) and any(
+            phrase in lowered for phrase in account_summary_phrases
+        ):
             return AgentPlan(intent=Intent.ACCOUNT_SUMMARY, user_id=user_id, confidence=0.9)
-        if not transaction_id and any(phrase in lowered for phrase in transaction_history_phrases):
+        if not TRANSACTION_PATTERN.search(message) and any(
+            phrase in lowered for phrase in transaction_history_phrases
+        ):
             return AgentPlan(intent=Intent.TRANSACTION_HISTORY, user_id=user_id, confidence=0.92)
         if any(term in lowered for term in policy_words):
             return AgentPlan(intent=Intent.POLICY, confidence=0.86)

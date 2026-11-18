@@ -30,7 +30,7 @@ class FintechAgent:
 
     def _plan(self, message: str, history: list[dict]) -> AgentPlan:
         local_plan = self.rule_router.route(message, history)
-        if local_plan.intent in {
+        if local_plan.confidence == 1 or local_plan.intent in {
             Intent.SMALL_TALK,
             Intent.PRIVATE_DATA,
             Intent.PROHIBITED_ADVICE,
@@ -45,6 +45,26 @@ class FintechAgent:
         if not provider_plan.user_id and local_plan.user_id:
             updates["user_id"] = local_plan.user_id
         return provider_plan.model_copy(update=updates) if updates else provider_plan
+
+    def _plan_customer_help(self, message: str, history: list[dict]) -> AgentPlan:
+        local_plan = self.rule_router.route(message, history)
+        if local_plan.intent != Intent.GENERAL_SUPPORT:
+            return local_plan
+
+        # The provider sees only the current, redacted message. References and
+        # conversation context stay in the signed-in application.
+        candidate = self.provider.route(message, [])
+        if (
+            candidate is None
+            or candidate.confidence < 0.75
+            or candidate.intent
+            not in {Intent.ACCOUNT_SUMMARY, Intent.TRANSACTION_HISTORY, Intent.KYC}
+            or candidate.user_id
+            or candidate.transaction_id
+            or candidate.escalate
+        ):
+            return local_plan
+        return AgentPlan(intent=candidate.intent, confidence=candidate.confidence)
 
     @staticmethod
     def _authorized(principal: Principal, user_id: str) -> bool:
@@ -79,16 +99,21 @@ class FintechAgent:
     ) -> dict[str, Any]:
         history = history or []
         cleaned_message = message.strip()
-        plan = self._plan(cleaned_message, history)
+        plan = (
+            self._plan(cleaned_message, history)
+            if allow_ticket_creation
+            else self._plan_customer_help(cleaned_message, history)
+        )
         if plan.intent == Intent.SMALL_TALK:
             response = self._small_talk_response(cleaned_message)
-            response = self._polish_response(
-                message=cleaned_message,
-                plan=plan,
-                response=response,
-                tools_used=[],
-                sources=[],
-            )
+            if allow_ticket_creation:
+                response = self._polish_response(
+                    message=cleaned_message,
+                    plan=plan,
+                    response=response,
+                    tools_used=[],
+                    sources=[],
+                )
             return self._result(response)
         if plan.intent == Intent.PRIVATE_DATA:
             return self._result(
@@ -194,13 +219,14 @@ class FintechAgent:
             )
 
         response = self._compose(plan, results, transaction_id, user_id)
-        response = self._polish_response(
-            message=cleaned_message,
-            plan=plan,
-            response=response,
-            tools_used=tools_used,
-            sources=sources,
-        )
+        if allow_ticket_creation:
+            response = self._polish_response(
+                message=cleaned_message,
+                plan=plan,
+                response=response,
+                tools_used=tools_used,
+                sources=sources,
+            )
         escalated = bool(ticket_id)
         return self._result(
             response,
