@@ -40,6 +40,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -564,6 +565,66 @@ class BankingappApplicationTests {
         assertEquals("Corrected Name", corrected.holderName());
         assertEquals(account.accountNumber(), corrected.accountNumber());
         assertEquals(0, account.balance().compareTo(corrected.balance()));
+    }
+
+    @Test
+    void savedRecipientsStayPrivateAndCanBeRemoved() throws Exception {
+        String customer = registerCustomer();
+        String recipientOwner = registerCustomer();
+        AccountResponse source = accountService.createAccount(
+                new CreateAccountRequest("Sender Name", BigDecimal.ZERO), customer);
+        AccountResponse recipient = accountService.createAccount(
+                new CreateAccountRequest("Recipient Name", BigDecimal.ZERO), recipientOwner);
+        String path = "/customer/accounts/{id}/saved-recipients/{number}";
+        String list = "/customer/accounts/saved-recipients";
+
+        mockMvc.perform(put(path, source.accountId(), recipient.accountNumber())
+                        .with(httpBasic(recipientOwner, "password123")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put(path, source.accountId(), source.accountNumber())
+                        .with(httpBasic(customer, "password123")))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(put(path, source.accountId(), recipient.accountNumber())
+                        .with(httpBasic(customer, "password123")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.maskedName").value("Recipient N•••"))
+                .andExpect(jsonPath("$.balance").doesNotExist());
+
+        mockMvc.perform(get(list).with(httpBasic(recipientOwner, "password123")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+        mockMvc.perform(delete(list + "/{number}", recipient.accountNumber())
+                        .with(httpBasic(recipientOwner, "password123")))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get(list).with(httpBasic(customer, "password123")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].accountNumber").value(recipient.accountNumber()));
+        mockMvc.perform(delete(list + "/{number}", recipient.accountNumber())
+                        .with(httpBasic(customer, "password123")))
+                .andExpect(status().isNoContent());
+        mockMvc.perform(get(list).with(httpBasic(customer, "password123")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.length()").value(0));
+    }
+
+    @Test
+    void concurrentRecipientSavesProduceOneEntry() throws Exception {
+        String customer = registerCustomer();
+        AccountResponse source = accountService.createAccount(
+                new CreateAccountRequest("Sender Name", BigDecimal.ZERO), customer);
+        AccountResponse recipient = accountService.createAccount(
+                new CreateAccountRequest("Recipient Name", BigDecimal.ZERO), registerCustomer());
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            CountDownLatch start = new CountDownLatch(1);
+            List<Future<?>> saves = new ArrayList<>();
+            for (int i = 0; i < 6; i++) {
+                saves.add(executor.submit(() -> {
+                    start.await();
+                    return accountService.saveRecipient(source.accountId(), recipient.accountNumber(), customer);
+                }));
+            }
+            start.countDown();
+            for (Future<?> save : saves) save.get(10, TimeUnit.SECONDS);
+        }
+        assertEquals(1, accountService.getSavedRecipients(customer).size());
     }
 
     private String registerCustomer() {

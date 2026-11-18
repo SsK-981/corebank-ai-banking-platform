@@ -7,6 +7,7 @@ import com.example.bankingapp.dto.CreateAccountRequest;
 import com.example.bankingapp.dto.CustomerTransferResponse;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
+import com.example.bankingapp.dto.SavedRecipientResponse;
 import com.example.bankingapp.dto.RiskSignalResponse;
 import com.example.bankingapp.dto.TransactionResponse;
 import com.example.bankingapp.dto.TransferRecipientResponse;
@@ -33,6 +34,7 @@ import com.example.bankingapp.service.AccountService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -52,6 +54,7 @@ public class AccountServiceImpl implements AccountService {
     private final BankAccountRepository bankAccountRepository;
     private final TransactionRepository transactionRepository;
     private final AuthService authService;
+    private final JdbcTemplate jdbc;
     private final TransactionAttemptService transactionAttemptService;
     private final TransferIdempotencyRepository transferIdempotencyRepository;
 
@@ -59,10 +62,12 @@ public class AccountServiceImpl implements AccountService {
                               TransactionRepository transactionRepository,
                               AuthService authService,
                               TransactionAttemptService transactionAttemptService,
-                              TransferIdempotencyRepository transferIdempotencyRepository) {
+                              TransferIdempotencyRepository transferIdempotencyRepository,
+                              JdbcTemplate jdbc) {
         this.bankAccountRepository = bankAccountRepository;
         this.transactionRepository = transactionRepository;
         this.authService = authService;
+        this.jdbc = jdbc;
         this.transactionAttemptService = transactionAttemptService;
         this.transferIdempotencyRepository = transferIdempotencyRepository;
     }
@@ -224,6 +229,51 @@ public class AccountServiceImpl implements AccountService {
     @Override
     @Transactional(readOnly = true)
     public TransferRecipientResponse previewTransferRecipient(Long sourceAccountId, String accountNumber, String username) {
+        return maskedRecipient(findEligibleRecipient(sourceAccountId, accountNumber, username));
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SavedRecipientResponse> getSavedRecipients(String username) {
+        long ownerId = authService.findUser(username).getId();
+        return jdbc.query("""
+                SELECT account.account_number, account.holder_name
+                FROM saved_recipient saved
+                JOIN bank_account account ON account.account_id = saved.recipient_account_id
+                WHERE saved.owner_id = ? AND account.active = TRUE
+                ORDER BY account.holder_name, account.account_number
+                """, (row, index) -> new SavedRecipientResponse(
+                row.getString("account_number"), maskHolderName(row.getString("holder_name"))), ownerId);
+    }
+
+    @Override
+    @Transactional
+    public SavedRecipientResponse saveRecipient(Long sourceAccountId, String accountNumber, String username) {
+        BankAccount recipient = findEligibleRecipient(sourceAccountId, accountNumber, username);
+        long ownerId = authService.findUser(username).getId();
+        // Serialize saves for this customer so repeated requests share one row.
+        jdbc.queryForObject("SELECT id FROM app_user WHERE id = ? FOR UPDATE", Long.class, ownerId);
+        jdbc.update("""
+                INSERT INTO saved_recipient (owner_id, recipient_account_id)
+                SELECT ?, ?
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM saved_recipient WHERE owner_id = ? AND recipient_account_id = ?
+                )
+                """, ownerId, recipient.getAccountId(), ownerId, recipient.getAccountId());
+        return new SavedRecipientResponse(recipient.getAccountNumber(), maskHolderName(recipient.getHolderName()));
+    }
+
+    @Override
+    @Transactional
+    public void removeSavedRecipient(String accountNumber, String username) {
+        long ownerId = authService.findUser(username).getId();
+        jdbc.update("""
+                DELETE FROM saved_recipient WHERE owner_id = ?
+                AND recipient_account_id = (SELECT account_id FROM bank_account WHERE account_number = ?)
+                """, ownerId, accountNumber);
+    }
+
+    private BankAccount findEligibleRecipient(Long sourceAccountId, String accountNumber, String username) {
         BankAccount source = findAccount(sourceAccountId);
         ensureOwnerOrAdmin(source, username, false);
         ensureActive(source);
@@ -235,14 +285,9 @@ public class AccountServiceImpl implements AccountService {
             throw new InvalidTransactionException("The recipient account must be different from the source account.");
         }
 
-        BankAccount recipient = bankAccountRepository.findByAccountNumber(accountNumber)
+        return bankAccountRepository.findByAccountNumber(accountNumber)
                 .filter(BankAccount::isActive)
                 .orElseThrow(() -> new AccountNotFoundException("No eligible recipient was found for this account number."));
-        String[] names = recipient.getHolderName().strip().split("\\s+", 2);
-        String surname = names.length == 2 ? names[1] : names[0];
-        String initial = surname.substring(0, surname.offsetByCodePoints(0, 1));
-        String maskedName = names.length == 2 ? names[0] + " " + initial + "•••" : initial + "•••";
-        return new TransferRecipientResponse(maskedName);
     }
 
     @Override
@@ -428,13 +473,14 @@ public class AccountServiceImpl implements AccountService {
     }
 
     private TransferRecipientResponse maskedRecipient(BankAccount recipient) {
-        String[] names = recipient.getHolderName().strip().split("\\s+", 2);
-        String givenName = names[0];
+        return new TransferRecipientResponse(maskHolderName(recipient.getHolderName()));
+    }
+
+    private String maskHolderName(String holderName) {
+        String[] names = holderName.strip().split("\\s+", 2);
         String surname = names.length == 2 ? names[1] : names[0];
         String initial = surname.substring(0, surname.offsetByCodePoints(0, 1));
-        return new TransferRecipientResponse(
-                names.length == 2 ? givenName + " " + initial + "•••" : initial + "•••"
-        );
+        return names.length == 2 ? names[0] + " " + initial + "•••" : initial + "•••";
     }
 
     private record LockedTransferAccounts(BankAccount source, BankAccount destination) {

@@ -22,6 +22,9 @@ document.addEventListener('DOMContentLoaded', () => {
   let inFlightTransfer = null;
   let recipientLookupTimer;
   let recipientLookup;
+  let savedRecipients = [];
+  let savedRecipientRequest = 0;
+  let savingRecipient = false;
   const sameAccountMessage =
     'The recipient account must be different from the source account.';
   let transactionRequest = 0;
@@ -220,6 +223,11 @@ document.addEventListener('DOMContentLoaded', () => {
     updateTransferRetry();
     transactionRequest++;
     clearRecipientPreview();
+    savedRecipientRequest++;
+    savedRecipients = [];
+    savingRecipient = false;
+    renderSavedRecipients();
+    hideMessage('saved-recipient-status');
     for (const id of ['account-cards', 'recent-transactions', 'activity-list'])
       $(id).replaceChildren();
     for (const id of [
@@ -495,6 +503,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     $('page-title').textContent = pageNames[page];
     currentPage = page;
+    if (session?.user && page === 'transfer') loadSavedRecipients();
   }
   function navigate(page, { historyEntry = true } = {}) {
     if (!['overview', 'transfer', 'activity', 'help'].includes(page))
@@ -1005,7 +1014,77 @@ document.addEventListener('DOMContentLoaded', () => {
     );
   }
 
-  function renderRecipientCard(maskedName, accountNumber) {
+  function renderSavedRecipients() {
+    const select = $('saved-recipient');
+    select.replaceChildren(new Option('Choose a saved recipient', ''));
+    for (const recipient of savedRecipients) {
+      select.add(new Option(
+        `${recipient.maskedName} · Ending in ${recipient.accountNumber.slice(-4)}`,
+        recipient.accountNumber,
+      ));
+    }
+    select.value = $('transfer-to').value.trim();
+    $('saved-recipient-picker').classList.toggle('hidden', !savedRecipients.length);
+    $('remove-recipient').disabled = !select.value || savingRecipient;
+
+    const save = $('recipient-preview').querySelector('.save-recipient');
+    if (save) {
+      const alreadySaved = savedRecipients.some(item => item.accountNumber === save.dataset.accountNumber);
+      save.disabled = alreadySaved || savingRecipient;
+      save.textContent = alreadySaved ? 'Saved' : 'Save recipient';
+    }
+  }
+
+  async function loadSavedRecipients() {
+    const activeSession = session;
+    const requestId = ++savedRecipientRequest;
+    try {
+      const recipients = await request('/customer/accounts/saved-recipients');
+      if (session !== activeSession || requestId !== savedRecipientRequest) return;
+      savedRecipients = recipients;
+      renderSavedRecipients();
+    } catch (error) {
+      if (session === activeSession && requestId === savedRecipientRequest)
+        message('saved-recipient-status', error.message, false);
+    }
+  }
+
+  async function changeSavedRecipient(accountNumber, source) {
+    if (savingRecipient) return;
+    const activeSession = session;
+    savingRecipient = true;
+    renderSavedRecipients();
+    try {
+      const path = source
+        ? `/customer/accounts/${source.accountId}/saved-recipients/${accountNumber}`
+        : `/customer/accounts/saved-recipients/${accountNumber}`;
+      await request(path, { method: source ? 'PUT' : 'DELETE' });
+      if (session !== activeSession) return;
+      message('saved-recipient-status', source ? 'Recipient saved.' : 'Recipient removed.');
+      await loadSavedRecipients();
+    } catch (error) {
+      if (session === activeSession) message('saved-recipient-status', error.message, false);
+    } finally {
+      if (session === activeSession) {
+        savingRecipient = false;
+        renderSavedRecipients();
+      }
+    }
+  }
+
+  $('saved-recipient').addEventListener('change', () => {
+    const accountNumber = $('saved-recipient').value;
+    if (accountNumber) $('transfer-to').value = accountNumber;
+    else $('transfer-to').value = '';
+    showRecipientPreview();
+  });
+
+  $('remove-recipient').addEventListener('click', () => {
+    const accountNumber = $('saved-recipient').value;
+    if (accountNumber) changeSavedRecipient(accountNumber);
+  });
+
+  function renderRecipientCard(maskedName, accountNumber, source) {
     const card = $('recipient-preview');
     card.className = 'recipient-card';
     card.replaceChildren();
@@ -1021,11 +1100,18 @@ document.addEventListener('DOMContentLoaded', () => {
       `Account ending in ${accountNumber.slice(-4)}`,
       'recipient-card-account',
     );
+    const save = appendText(card, 'button', 'Save recipient', 'quiet-button save-recipient');
+    save.type = 'button';
+    save.dataset.accountNumber = accountNumber;
+    save.addEventListener('click', () => changeSavedRecipient(accountNumber, source));
+    renderSavedRecipients();
   }
 
   function showRecipientPreview() {
     clearRecipientPreview();
     hideMessage('transfer-result');
+    hideMessage('saved-recipient-status');
+    renderSavedRecipients();
     const from = transferSource();
     const to = $('transfer-to').value.trim();
     if (!from || !/^\d{12}$/.test(to)) return;
@@ -1040,7 +1126,7 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const recipient = await lookupRecipient(from, to, signal);
         if (!signal.aborted) {
-          renderRecipientCard(recipient.maskedName, to);
+          renderRecipientCard(recipient.maskedName, to, from);
         }
       } catch (error) {
         if (!signal.aborted) message('recipient-preview', error.message, false);
@@ -1093,7 +1179,7 @@ document.addEventListener('DOMContentLoaded', () => {
       )
         return;
 
-      renderRecipientCard(recipient.maskedName, to);
+      renderRecipientCard(recipient.maskedName, to, from);
       pendingTransfer = {
         from,
         to,

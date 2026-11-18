@@ -7,6 +7,7 @@ import com.example.bankingapp.dto.CreateAccountRequest;
 import com.example.bankingapp.dto.CustomerTransferResponse;
 import com.example.bankingapp.dto.MoneyRequest;
 import com.example.bankingapp.dto.RiskInsightResponse;
+import com.example.bankingapp.dto.SavedRecipientResponse;
 import com.example.bankingapp.dto.TransactionResponse;
 import com.example.bankingapp.dto.TransferRecipientResponse;
 import com.example.bankingapp.dto.TransferRequest;
@@ -14,6 +15,8 @@ import com.example.bankingapp.dto.TransferResponse;
 import com.example.bankingapp.dto.UpdateAccountRequest;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+
+import java.util.List;
 
 public interface AccountService {
 
@@ -36,6 +39,12 @@ public interface AccountService {
     AccountResponse withdraw(Long accountId, MoneyRequest request, String username, boolean admin);
 
     TransferRecipientResponse previewTransferRecipient(Long sourceAccountId, String accountNumber, String username);
+
+    List<SavedRecipientResponse> getSavedRecipients(String username);
+
+    SavedRecipientResponse saveRecipient(Long sourceAccountId, String accountNumber, String username);
+
+    void removeSavedRecipient(String accountNumber, String username);
 
     TransferResponse transfer(TransferRequest request, String username, boolean admin);
 

@@ -278,6 +278,20 @@ p {
   border: 0 !important;
   box-shadow: none !important;
 }
+.saved-recipient-picker {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+}
+.saved-recipient-picker label {
+  flex: 1;
+  min-width: 0;
+}
+.recipient-card .save-recipient {
+  margin-left: auto;
+  align-self: center;
+  flex-shrink: 0;
+}
 .recipient-card {
   display: flex;
   align-items: center;

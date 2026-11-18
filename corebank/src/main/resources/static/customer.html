@@ -299,7 +299,16 @@
                     required
                     aria-label="Select source account"
                   ></select></label
-                ><label
+                >
+                <div id="saved-recipient-picker" class="saved-recipient-picker hidden">
+                  <label>Saved recipients
+                    <select id="saved-recipient"></select>
+                  </label>
+                  <button id="remove-recipient" type="button" class="quiet-button" disabled>
+                    Remove
+                  </button>
+                </div>
+                <label
                   >Recipient account number<input
                     type="text"
                     id="transfer-to"
@@ -310,6 +319,7 @@
                     required
                 /></label>
                 <div id="recipient-preview" class="hidden" role="status"></div>
+                <p id="saved-recipient-status" class="message hidden" role="status"></p>
                 <label
                   >Amount<span class="currency-input"
                     ><span>₹</span
